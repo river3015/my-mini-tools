@@ -66,7 +66,8 @@ launchd/install.sh uninstall  # 登録を解除する
 - 異常終了したら 30 秒後に再起動する。
 - 再起動: `launchctl kickstart -k gui/$(id -u)/io.github.river3015.voice-input`
 
-launchd から起動すると、権限は uv が使う Python 本体（`uv python find 3.12` が示すパスの実体）に対して求められる。
+launchd からは `~/.local/share/voice-input/venv` の Python を直接起動する（uv は Homebrew で更新するたびにパスが変わり、権限が外れるため）。
+権限は、その Python の実体（`install.sh` が最後に表示するパス）に対して求められる。
 ターミナルで付けた権限は引き継がれないので、システム設定で付け直す。
 Python のバージョンが上がってパスが変わったときも、付け直しが必要。
 
