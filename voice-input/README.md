@@ -6,6 +6,13 @@ AI エージェントへの指示を音声で出すためのツール。
 背景と調査は [docs/voice-input-research.md](../docs/voice-input-research.md) を参照。
 設計は [VoiceInk](https://github.com/Beingpax/VoiceInk) を参考にしたが、コードは流用していない。
 
+実装は2つある。動作は同じで、設定ファイル・API キー・履歴を共有する。
+
+| 実装 | 場所 | 用途 |
+| --- | --- | --- |
+| macOS アプリ（Swift） | `macos/` | 常駐用。権限を VoiceInput.app だけに与えられる |
+| Python スクリプト | `voice_input.py` | ターミナルでの試用、`--file` での確認 |
+
 ## 仕組み
 
 1. ホットキー（既定は右 Command）を押している間、マイクから 16kHz で録音する。
@@ -22,7 +29,9 @@ AI エージェントへの指示を音声で出すためのツール。
 
 ## 必要なもの
 
-- macOS、[uv](https://docs.astral.sh/uv/)
+- macOS 14 以上
+- アプリ: Xcode の Command Line Tools（`swiftc`、`codesign`）
+- Python 版: [uv](https://docs.astral.sh/uv/)
 - ElevenLabs の API キー。権限は Speech to Text のみでよい。
 
 ## セットアップ
@@ -38,13 +47,13 @@ cp config.example.toml ~/.config/voice-input/config.toml
 
 API キーは環境変数 `ELEVENLABS_API_KEY` からも読む。環境変数がある場合はそちらを優先する。
 
-起動するターミナルアプリに、システム設定の「プライバシーとセキュリティ」で次の権限を与える。
+Python 版をターミナルで動かす場合は、ターミナルアプリに、システム設定の「プライバシーとセキュリティ」で次の権限を与える。
 
 - マイク
 - 入力監視（ホットキーの検知）
 - アクセシビリティ（Cmd+V の送信）
 
-## 使い方
+## 使い方（Python 版）
 
 ```sh
 ./voice_input.py              # 常駐して、ホットキーで音声入力する
@@ -54,22 +63,26 @@ API キーは環境変数 `ELEVENLABS_API_KEY` からも読む。環境変数が
 
 VoiceInk など、同じホットキーを使うアプリとは同時に動かさない。
 
-## ログイン時に自動で起動する
+## macOS アプリとして常駐させる
 
 ```sh
-launchd/install.sh            # LaunchAgent を登録して起動する
-launchd/install.sh uninstall  # 登録を解除する
+macos/make-cert.sh            # 初回だけ: 署名用の自己署名証明書をログインキーチェーンに作る
+macos/build.sh                # macos/build/VoiceInput.app をビルドして署名する
+launchd/install.sh            # ~/Applications に入れ、LaunchAgent に登録して起動する
+launchd/install.sh uninstall  # 登録を解除し、アプリを消す
 ```
 
-- ターミナルで動かしている voice_input.py は、先に止めておく（スクリプトは二重起動を検知すると登録しない）。
-- ログは `~/Library/Logs/voice-input.log` に出る。
-- 異常終了したら 30 秒後に再起動する。
+- 権限（マイク・入力監視・アクセシビリティ）は VoiceInput.app に与える。初回起動時に確認の画面が出る。
+- 固定の証明書で署名するので、ビルドし直しても権限は外れない。証明書がない場合は ad-hoc 署名になり、ビルドのたびに付け直しになる。
+- `build.sh` の署名時に、キーチェーンの秘密鍵を使ってよいか確認の画面が出る。「常に許可」にすると、ほかのプロセスも確認なしでこの鍵で署名できるようになるので、都度「許可」を選ぶ。
+- ターミナルで動かしている voice_input.py は先に止めておく（二重起動を検知すると登録しない）。
+- ログは `~/Library/Logs/voice-input.log` に出る。異常終了したら 30 秒後に再起動する。
 - 再起動: `launchctl kickstart -k gui/$(id -u)/io.github.river3015.voice-input`
+- コードを変えたら `build.sh` と `install.sh` をやり直す。
 
-launchd からは `~/.local/share/voice-input/venv` の Python を直接起動する（uv は Homebrew で更新するたびにパスが変わり、権限が外れるため）。
-権限は、その Python の実体（`install.sh` が最後に表示するパス）に対して求められる。
-ターミナルで付けた権限は引き継がれないので、システム設定で付け直す。
-Python のバージョンが上がってパスが変わったときも、付け直しが必要。
+アプリも `--file 音声ファイル`、`--no-paste`、`--check-config`（設定の読み込み結果を表示）を受け付ける。
+設定ファイルの場所は環境変数 `VOICE_INPUT_CONFIG` で変えられる。
+設定ファイルは、使っている TOML の範囲（文字列、真偽値、文字列の配列、`[replacements]` 表）だけを読む。
 
 ## 語彙の更新（Claude Code スキル）
 

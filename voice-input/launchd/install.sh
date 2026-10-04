@@ -1,42 +1,48 @@
 #!/bin/bash
-# Register voice-input as a LaunchAgent so it starts at login.
+# Install VoiceInput.app to ~/Applications and register it as a LaunchAgent
+# so it starts at login. Build the app first with macos/build.sh.
 # Usage: launchd/install.sh [uninstall]
 set -euo pipefail
 
 LABEL="io.github.river3015.voice-input"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/voice-input.log"
-SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/voice_input.py"
-# Run a fixed venv's Python directly instead of `uv run`. macOS grants
-# permissions to the launched binary, and uv's Homebrew path changes on upgrade.
-VENV="$HOME/.local/share/voice-input/venv"
+BUILT_APP="$(cd "$(dirname "$0")/.." && pwd)/macos/build/VoiceInput.app"
+APP="$HOME/Applications/VoiceInput.app"
+BIN="$APP/Contents/MacOS/VoiceInput"
 DOMAIN="gui/$(id -u)"
 
 if launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1; then
   launchctl bootout "$DOMAIN/$LABEL"
   # bootout returns before the process exits.
   for _ in {1..10}; do
-    pgrep -f "$SCRIPT" >/dev/null || break
+    pgrep -f "$BIN" >/dev/null || break
     sleep 0.5
   done
 fi
+# Left over from the earlier Python-based agent.
+rm -rf "$HOME/.local/share/voice-input/venv"
 
 if [[ "${1:-}" == "uninstall" ]]; then
   rm -f "$PLIST"
-  rm -rf "$VENV"
+  rm -rf "$APP"
   echo "uninstalled $LABEL"
   exit 0
 fi
 
 # A second instance would react to the same hotkey.
-if pgrep -f "$SCRIPT" >/dev/null; then
-  echo "voice_input.py is already running. Stop it first (Ctrl+C in its terminal)." >&2
+if pgrep -f "voice_input.py|$BIN" >/dev/null; then
+  echo "voice-input is already running. Stop it first (Ctrl+C in its terminal)." >&2
   exit 1
 fi
 
-uv venv --quiet --allow-existing --python 3.12 "$VENV"
-uv export --quiet --script "$SCRIPT" --no-hashes |
-  uv pip install --quiet --python "$VENV/bin/python" -r -
+if [[ ! -d "$BUILT_APP" ]]; then
+  echo "$BUILT_APP not found. Run macos/build.sh first." >&2
+  exit 1
+fi
+mkdir -p "$(dirname "$APP")"
+rm -rf "$APP"
+cp -R "$BUILT_APP" "$APP"
 
 mkdir -p "$(dirname "$PLIST")"
 cat >"$PLIST" <<EOF
@@ -48,16 +54,8 @@ cat >"$PLIST" <<EOF
   <string>$LABEL</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$VENV/bin/python</string>
-    <string>$SCRIPT</string>
+    <string>$BIN</string>
   </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>PYTHONUNBUFFERED</key>
-    <string>1</string>
-  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -79,6 +77,4 @@ EOF
 
 plutil -lint "$PLIST" >/dev/null
 launchctl bootstrap "$DOMAIN" "$PLIST"
-echo "installed $LABEL (log: $LOG)"
-echo "grant Microphone, Input Monitoring and Accessibility to:"
-echo "  $(readlink -f "$VENV/bin/python")"
+echo "installed $APP as $LABEL (log: $LOG)"

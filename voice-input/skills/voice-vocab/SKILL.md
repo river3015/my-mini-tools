@@ -44,4 +44,4 @@ history には口述した内容がそのまま入っている。必要な行だ
 6. 報告する。追加・変更した語と、keyterms と replacements のどちらに入れたかを伝える。
 
 再起動は不要。voice-input は次の文字起こしの前に設定ファイルの更新を検知して読み直し、ログに `config reloaded` を出す。
-`hotkey` を変えたときだけ、`launchctl kickstart -k gui/$(id -u)/io.github.river3015.voice-input` で再起動する。
+`hotkey` を変えたときだけ、`launchctl kickstart -k gui/$(id -u)/io.github.river3015.voice-input` で再起動する（常駐しているのは ~/Applications/VoiceInput.app）。
