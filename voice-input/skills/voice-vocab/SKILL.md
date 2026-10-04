@@ -38,8 +38,10 @@ history には口述した内容がそのまま入っている。必要な行だ
 5. 検証する。
 
    ```sh
-   python3 -c 'import tomllib,pathlib; c=tomllib.loads(pathlib.Path("~/.config/voice-input/config.toml").expanduser().read_text()); print(len(c.get("keyterms",[])), "keyterms,", len(c.get("replacements",{})), "replacements")'
+   ~/Applications/VoiceInput.app/Contents/MacOS/VoiceInput --check-config
    ```
+
+   アプリは TOML の一部（文字列、真偽値、文字列の配列、`[replacements]` 表）しか読めないので、その範囲で書く。
 
 6. 報告する。追加・変更した語と、keyterms と replacements のどちらに入れたかを伝える。
 
