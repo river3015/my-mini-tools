@@ -161,6 +161,16 @@ func main() -> Int32 {
             return 2
         }
 
+        // "Quit & Reopen" after granting a permission, or login item restoration,
+        // can start a second copy outside launchd; both would paste.
+        let others = NSRunningApplication.runningApplications(
+            withBundleIdentifier: Bundle.main.bundleIdentifier ?? ""
+        ).filter { $0.processIdentifier != getpid() }
+        if !others.isEmpty {
+            log("already running (pid \(others.map(\.processIdentifier))), exiting")
+            return 0
+        }
+
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         requestPermissions()
