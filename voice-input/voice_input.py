@@ -132,13 +132,15 @@ def transcribe(
     audio: bytes,
     filename: str = "audio.wav",
 ) -> str:
-    data: list[tuple[str, str]] = [
-        ("model_id", config.model),
-        ("language_code", config.language),
-        ("tag_audio_events", "false"),
-        ("no_verbatim", str(config.no_verbatim).lower()),
-    ]
-    data += [("keyterms", term) for term in config.keyterms]
+    data: dict[str, str | list[str]] = {
+        "model_id": config.model,
+        "language_code": config.language,
+        "tag_audio_events": "false",
+        "no_verbatim": str(config.no_verbatim).lower(),
+    }
+    if config.keyterms:
+        # A list value is sent as repeated "keyterms" form fields.
+        data["keyterms"] = config.keyterms
     response = client.post(
         STT_URL,
         headers={"xi-api-key": api_key},
@@ -279,9 +281,12 @@ def main() -> None:
 
     if args.file:
         with httpx.Client() as client:
-            raw = transcribe(
-                client, api_key, config, args.file.read_bytes(), args.file.name
-            )
+            try:
+                raw = transcribe(
+                    client, api_key, config, args.file.read_bytes(), args.file.name
+                )
+            except httpx.HTTPStatusError as e:
+                raise SystemExit(f"transcription failed: {e}\n{e.response.text}")
         print(apply_replacements(raw, config.replacements))
         return
 
