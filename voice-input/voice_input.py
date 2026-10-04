@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import queue
 import subprocess
@@ -40,6 +41,8 @@ from pynput import keyboard
 STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 KEYCHAIN_SERVICE = "voice-input-elevenlabs"
 CONFIG_PATH = Path.home() / ".config" / "voice-input" / "config.toml"
+HISTORY_PATH = Path.home() / ".local" / "state" / "voice-input" / "history.jsonl"
+HISTORY_MAX_LINES = 1000
 SAMPLE_RATE = 16_000
 MIN_SECONDS = 0.3
 HOTKEYS = {
@@ -152,6 +155,18 @@ def transcribe(
     return response.json()["text"].strip()
 
 
+def append_history(raw: str, text: str) -> None:
+    """Keep recent results so misrecognitions can be reviewed later."""
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    entry = {"time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "raw": raw, "text": text}
+    with HISTORY_PATH.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    HISTORY_PATH.chmod(0o600)
+    lines = HISTORY_PATH.read_text(encoding="utf-8").splitlines(keepends=True)
+    if len(lines) > HISTORY_MAX_LINES:
+        HISTORY_PATH.write_text("".join(lines[-HISTORY_MAX_LINES:]), encoding="utf-8")
+
+
 def apply_replacements(text: str, replacements: dict[str, str]) -> str:
     for src, dst in replacements.items():
         text = text.replace(src, dst)
@@ -211,16 +226,34 @@ class Recorder:
 
 
 class Dictation:
-    def __init__(self, config: Config, api_key: str, paste_enabled: bool) -> None:
-        self.config = config
+    def __init__(self, config_path: Path, api_key: str, paste_enabled: bool) -> None:
+        self.config_path = config_path
+        self.config = Config.load(config_path)
+        self.config_mtime = self._mtime()
         self.api_key = api_key
         self.paste_enabled = paste_enabled
-        self.hotkey = HOTKEYS[config.hotkey]
+        self.hotkey = HOTKEYS[self.config.hotkey]
         self.recorder = Recorder()
         self.recording = False
         self.cancelled = False
         self.jobs: queue.Queue[np.ndarray] = queue.Queue()
         self.client = httpx.Client()
+
+    def _mtime(self) -> float:
+        return self.config_path.stat().st_mtime if self.config_path.exists() else 0.0
+
+    def reload_config(self) -> None:
+        """Pick up vocabulary edits without a restart. The hotkey needs a restart."""
+        mtime = self._mtime()
+        if mtime == self.config_mtime:
+            return
+        self.config_mtime = mtime
+        try:
+            self.config = Config.load(self.config_path)
+        except (OSError, TypeError, tomllib.TOMLDecodeError, SystemExit) as e:
+            log(f"config reload failed, keeping the previous config: {e}")
+            return
+        log(f"config reloaded: {len(self.config.keyterms)} keyterms")
 
     def on_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> None:
         if key == self.hotkey and not self.recording:
@@ -245,6 +278,11 @@ class Dictation:
     def worker(self) -> None:
         while True:
             frames = self.jobs.get()
+            if not frames.any():
+                log("recorded silence only. check the microphone permission")
+                play("Basso")
+                continue
+            self.reload_config()
             started = time.monotonic()
             try:
                 raw = transcribe(self.client, self.api_key, self.config, to_wav(frames))
@@ -255,6 +293,7 @@ class Dictation:
                 continue
             text = apply_replacements(raw, self.config.replacements)
             log(f"{time.monotonic() - started:.1f}s: {text}")
+            append_history(raw, text)
             if text and self.paste_enabled:
                 paste(text)
 
@@ -276,10 +315,10 @@ def main() -> None:
     parser.add_argument("--file", type=Path, help="transcribe an audio file and exit")
     args = parser.parse_args()
 
-    config = Config.load(args.config)
     api_key = load_api_key()
 
     if args.file:
+        config = Config.load(args.config)
         with httpx.Client() as client:
             try:
                 raw = transcribe(
@@ -291,7 +330,7 @@ def main() -> None:
         return
 
     try:
-        Dictation(config, api_key, paste_enabled=not args.no_paste).run()
+        Dictation(args.config, api_key, paste_enabled=not args.no_paste).run()
     except KeyboardInterrupt:
         pass
 

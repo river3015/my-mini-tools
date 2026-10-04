@@ -16,6 +16,9 @@ AI エージェントへの指示を音声で出すためのツール。
 - ホットキーを押している間にほかのキーを押した場合は、通常のショートカットとみなして録音を捨てる。
 - 0.3 秒未満の録音も捨てる。
 - 開始時に Tink、送信時に Pop、失敗時に Basso の音を鳴らす。
+- 無音しか録れなかった場合は送らない。マイクの権限がないと無音になる。
+- 設定ファイルが更新されると、次の文字起こしの前に読み直す。`hotkey` の変更だけは再起動が必要。
+- 認識結果を `~/.local/state/voice-input/history.jsonl` に直近1000件まで残す（権限 600）。誤認識の見直しに使う。
 
 ## 必要なもの
 
@@ -50,6 +53,33 @@ API キーは環境変数 `ELEVENLABS_API_KEY` からも読む。環境変数が
 ```
 
 VoiceInk など、同じホットキーを使うアプリとは同時に動かさない。
+
+## ログイン時に自動で起動する
+
+```sh
+launchd/install.sh            # LaunchAgent を登録して起動する
+launchd/install.sh uninstall  # 登録を解除する
+```
+
+- ターミナルで動かしている voice_input.py は、先に止めておく（スクリプトは二重起動を検知すると登録しない）。
+- ログは `~/Library/Logs/voice-input.log` に出る。
+- 異常終了したら 30 秒後に再起動する。
+- 再起動: `launchctl kickstart -k gui/$(id -u)/io.github.river3015.voice-input`
+
+launchd から起動すると、権限は uv が使う Python 本体（`uv python find 3.12` が示すパスの実体）に対して求められる。
+ターミナルで付けた権限は引き継がれないので、システム設定で付け直す。
+Python のバージョンが上がってパスが変わったときも、付け直しが必要。
+
+## 語彙の更新（Claude Code スキル）
+
+`skills/voice-vocab/` は、誤認識を `keyterms` や `replacements` に反映する手順をまとめたスキル。
+次のようにリンクすると、Claude Code で「音声入力で〇〇が△△になった」や `/voice-vocab` で使える。
+
+```sh
+ln -sfn "$PWD/skills/voice-vocab" ~/.claude/skills/voice-vocab
+```
+
+設定ファイルと履歴は個人の語彙を含むので、このリポジトリには入れない。
 
 ## 制限
 
