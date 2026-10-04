@@ -73,6 +73,22 @@ macOS では、マイク・アクセシビリティ・入力監視の権限が�
   - 辞書（Dictionary）に登録した語は、Scribe の `keyterms` として送られる（[LLMkit の ElevenLabsClient.swift](https://github.com/Beingpax/LLMkit/blob/main/Sources/LLMkit/Transcription/ElevenLabsClient.swift)）。
 - 評価方法: 同じ文を macOS 標準の音声入力と VoiceInk の Scribe でそれぞれ読み上げ、誤認識の数を比べる。
 
+## voice-input（自作版）の動作確認（2026-10-04）
+
+macOS の `say -v Kyoko` で作った合成音声を、`--file` で Scribe v2 に送った。
+
+| 条件 | 結果 |
+| --- | --- |
+| 読み上げた文 | テラグラントのプランで意図しない置換が出ているので、原因をステートと突き合わせて調べて。えーと、クロードコードで実行してください。 |
+| 設定なし | TeraGrantのプランで意図しない遅延が出ているので、原因をstateと突き合わせて調べて、A8 Cloud Codeで実行してください。 |
+| keyterms・置換あり | Terragruntのプランで意図しない遅延が出ているので、原因をstateと突き合わせて調べて、Claude Codeで実行してください。 |
+
+- keyterms で「Terragrunt」「Claude Code」が正しくなった。
+- `no_verbatim` で「えーと」が消えた。
+- 「置換」が「遅延」になった。合成音声の発音のせいか、Scribe の誤認識かは未確認。
+- 処理時間は約2.6秒（uv の起動時間を含む）。
+- 合成音声での確認なので、実際の声での精度は別途確かめる。
+
 ## 参考
 
 - [ElevenLabs STT API](https://elevenlabs.io/speech-to-text-api) / [料金](https://elevenlabs.io/pricing/api)
