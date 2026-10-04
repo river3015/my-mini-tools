@@ -65,6 +65,14 @@ macOS 標準の音声入力で AI エージェントに指示を出している�
 
 macOS では、マイク・アクセシビリティ・入力監視の権限が必要。
 
+## VoiceInk での試用（2026-10-04〜）
+
+- `brew install --cask voiceink` で v2.21 を入れた（macOS 15 以上が必要）。無料試用のあと、ライセンスは有料。
+- ソースで確認した事実:
+  - ElevenLabs の `scribe_v2`（録音後に一括で文字起こし）と、ストリーミング版に対応している。
+  - 辞書（Dictionary）に登録した語は、Scribe の `keyterms` として送られる（[LLMkit の ElevenLabsClient.swift](https://github.com/Beingpax/LLMkit/blob/main/Sources/LLMkit/Transcription/ElevenLabsClient.swift)）。
+- 評価方法: 同じ文を macOS 標準の音声入力と VoiceInk の Scribe でそれぞれ読み上げ、誤認識の数を比べる。
+
 ## 参考
 
 - [ElevenLabs STT API](https://elevenlabs.io/speech-to-text-api) / [料金](https://elevenlabs.io/pricing/api)
