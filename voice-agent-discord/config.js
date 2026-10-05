@@ -9,7 +9,7 @@ const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 const expand = (path) => (path.startsWith("~/") ? join(homedir(), path.slice(2)) : path);
 
 export function loadConfig() {
-  if (!existsSync(CONFIG_FILE)) return { repos: {}, jobTimeoutMinutes: 15 };
+  if (!existsSync(CONFIG_FILE)) return { repos: {}, jobTimeoutMinutes: 15, local: {} };
   const raw = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
   const repos = {};
   for (const [name, path] of Object.entries(raw.repos ?? {})) {
@@ -17,5 +17,6 @@ export function loadConfig() {
     if (!existsSync(join(dir, ".git"))) throw new Error(`${CONFIG_FILE}: ${name} (${dir}) is not a git repository`);
     repos[name] = dir;
   }
-  return { repos, jobTimeoutMinutes: raw.jobTimeoutMinutes ?? 15 };
+  // local は local.js（ElevenLabs を使わない版）の設定
+  return { repos, jobTimeoutMinutes: raw.jobTimeoutMinutes ?? 15, local: raw.local ?? {} };
 }

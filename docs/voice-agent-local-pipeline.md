@@ -65,3 +65,19 @@ ElevenLabs Agents を挟む構成（約1秒）より遅い。ただし、歩き�
 - 音声認識: SpeechTranscriber（速く、実際の声の精度も十分）。Swift の小さな補助プログラムとして動かす。
 - 応答: `claude` を stream-json で常駐させる（セッションの文脈が続く。モデルは sonnet か opus で試す）。
 - 音声合成: VOICEVOX のエンジン（キャラクターごとの利用規約は未確認）。
+
+## 通し試験（部品をつないだ結果、2026-10-06）
+
+`voice-agent-discord` のローカル版の部品（stt.js、claude-session.js、voicevox.js、mcp.js、jobs.js）を Discord なしでつなぎ、録音済みの声と文字の発話で試した（sonnet、Claude Code 2.1.288）。
+
+| 発話 | 送信から最初の1文ができるまで | 最初の音声ができるまで |
+| --- | --- | --- |
+| 雑談（ツールなし） | 1.8〜2.3 秒 | 2.6〜3.1 秒 |
+| リポジトリのファイルを読む（Glob、Read） | 5.6 秒 | 6.8 秒 |
+| ジョブを頼む（MCP の run_claude_code） | 4.5 秒 | 5.0 秒 |
+
+- 実際の話し終わりからは、これに無音の待ち時間 0.7 秒と音声認識 0.1 秒が加わる。
+- MCP のツールは、既定では ToolSearch で探してから呼ぶため1往復（約1秒）増える。`ENABLE_TOOL_SEARCH=false` で起動すると直接呼ぶ。
+- stream-json の入力では、返事の途中に送ったメッセージは同じターンに取り込まれ、`result` は1つしか出ない。発話と `result` を1対1で対応づけられない。
+- `{"type":"control_request","request":{"subtype":"interrupt"}}` を送ると、返事を作っている途中でも数ミリ秒で止まり、`result`（`error_during_execution`）が出る。止めた後の発話にも文脈を保ったまま答える。
+- 通話の終わりに頼んだまとめ（決まったこと、やること、未解決の論点、ジョブ）は、ジョブの結果や中断した話題まで正しく拾えていた。

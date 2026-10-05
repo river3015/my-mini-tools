@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node bot.js",
+    "local": "node local.js",
     "agent": "node agent.js",
     "echo": "node echo.js"
   },

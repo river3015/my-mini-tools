@@ -2,5 +2,10 @@
   "repos": {
     "my-mini-tools": "~/git/my-mini-tools"
   },
-  "jobTimeoutMinutes": 15
+  "jobTimeoutMinutes": 15,
+  "local": {
+    "model": "sonnet",
+    "speaker": 3,
+    "speedScale": 1.15
+  }
 }
