@@ -1,0 +1,12 @@
+{
+  "name": "voice-agent-discord",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "echo": "node echo.js"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.27.0"
+  }
+}
