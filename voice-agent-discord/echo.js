@@ -1,6 +1,5 @@
 // 手順1: DAVE（E2EE）必須の Discord で Bot が音声を受信できるかを確かめるエコー Bot。
 // オーナーがボイスチャンネルに入ると同じチャンネルに入り、話した内容を区切りごとにそのまま返す。
-import { execFileSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { Client, Events, GatewayIntentBits } from "discord.js";
 import {
@@ -14,27 +13,11 @@ import {
   getVoiceConnection,
   joinVoiceChannel,
 } from "@discordjs/voice";
+import { discordToken } from "./secrets.js";
 
-const KEYCHAIN_SERVICE = "voice-agent-discord-token";
 const SILENCE_MS = 800; // この長さ黙ったら一区切りとみなす
 const MIN_PACKETS = 15; // 20ms/パケット。0.3秒未満は捨てる
 const DEBUG = process.env.VOICE_DEBUG === "1";
-
-function loadToken() {
-  if (process.env.DISCORD_TOKEN) return process.env.DISCORD_TOKEN;
-  try {
-    return execFileSync("security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    console.error(
-      "Discord bot token not found. Store it in the Keychain:\n" +
-        `  security add-generic-password -s ${KEYCHAIN_SERVICE} -a "$USER" -w`,
-    );
-    process.exit(1);
-  }
-}
 
 function log(...args) {
   console.log(new Date().toISOString(), ...args);
@@ -140,4 +123,4 @@ function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-client.login(loadToken());
+client.login(discordToken());
