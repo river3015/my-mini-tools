@@ -16,6 +16,8 @@ export const agentConfig = {
     asr: { user_input_audio_format: "pcm_16000" },
     // 日本語には v2.5 以降のモデルが要る。声は tts.voice_id で変えられる（未指定なら既定の声）
     tts: { model_id: "eleven_flash_v2_5", agent_output_audio_format: "pcm_48000" },
+    // 既定の turn_v3 は Discord で録った声だと返事まで約3秒待った。turn_v2 では約1秒になった（2026-10-06）
+    turn: { turn_model: "turn_v2", turn_eagerness: "eager", speculative_turn: true },
   },
   // 署名付き URL なしでは接続できないようにする
   platform_settings: { auth: { enable_auth: true } },
