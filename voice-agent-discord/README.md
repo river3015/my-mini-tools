@@ -6,7 +6,7 @@ Discord のボイスチャンネルを電話代わりにして、AI エージェ
 
 ## 状態
 
-1. 🚧 エコー Bot（`echo.js`）: DAVE 必須の環境で音声を受信できるかの確認
+1. ✅ エコー Bot（`echo.js`）: DAVE 必須の環境で音声を受信できるかの確認（2026-10-06、DAVE protocol v1 で受信・再生できた）
 2. 💡 ElevenLabs Agents との会話
 3. 💡 Claude Code の呼び出し、完了通知、承認ボタン
 
