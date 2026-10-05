@@ -5,12 +5,14 @@ import { EventEmitter } from "node:events";
 const SIGNED_URL_API = "https://api.elevenlabs.io/v1/convai/conversation/get-signed-url";
 const MAX_QUEUED_CHUNKS = 100; // 接続待ちの間に貯める音声（100ms × 100 = 10秒）
 
-// emit するイベント: ready / audio(Buffer) / interruption / user_transcript(text) / agent_response(text) / close(reason)
+// emit するイベント: ready / audio(Buffer) / interruption / user_transcript(text) / agent_response(text)
+//   / tool_call({ tool_name, tool_call_id, parameters }) / close(reason)
 export class Conversation extends EventEmitter {
-  constructor({ apiKey, agentId }) {
+  constructor({ apiKey, agentId, dynamicVariables = {} }) {
     super();
     this.apiKey = apiKey;
     this.agentId = agentId;
+    this.dynamicVariables = dynamicVariables;
     this.ws = null;
     this.ready = false;
     this.closed = false;
@@ -27,7 +29,9 @@ export class Conversation extends EventEmitter {
 
     this.ws = new WebSocket(signed_url);
     this.ws.addEventListener("open", () => {
-      this.ws.send(JSON.stringify({ type: "conversation_initiation_client_data" }));
+      this.ws.send(
+        JSON.stringify({ type: "conversation_initiation_client_data", dynamic_variables: this.dynamicVariables }),
+      );
     });
     this.ws.addEventListener("message", (event) => this.#onMessage(JSON.parse(event.data)));
     this.ws.addEventListener("error", () => this.close("websocket error"));
@@ -43,6 +47,19 @@ export class Conversation extends EventEmitter {
       return;
     }
     this.ws.send(JSON.stringify({ user_audio_chunk: pcm.toString("base64") }));
+  }
+
+  sendToolResult(toolCallId, result, isError = false) {
+    this.#send({ type: "client_tool_result", tool_call_id: toolCallId, result, is_error: isError });
+  }
+
+  // エージェントに文字で話しかける（ジョブの完了通知に使う）
+  sendUserMessage(text) {
+    this.#send({ type: "user_message", text });
+  }
+
+  #send(msg) {
+    if (this.ready) this.ws.send(JSON.stringify(msg));
   }
 
   close(reason = "closed by client") {
@@ -80,6 +97,9 @@ export class Conversation extends EventEmitter {
         break;
       case "agent_response":
         this.emit("agent_response", msg.agent_response_event.agent_response);
+        break;
+      case "client_tool_call":
+        this.emit("tool_call", msg.client_tool_call);
         break;
       case "ping":
         this.ws.send(JSON.stringify({ type: "pong", event_id: msg.ping_event.event_id }));

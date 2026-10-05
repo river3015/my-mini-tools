@@ -1,0 +1,6 @@
+{
+  "repos": {
+    "my-mini-tools": "~/git/my-mini-tools"
+  },
+  "jobTimeoutMinutes": 15
+}
