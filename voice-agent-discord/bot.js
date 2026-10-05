@@ -1,7 +1,7 @@
 // オーナーがボイスチャンネルに入ると同じチャンネルに入り、ElevenLabs Agents と音声で会話させる。
 // エージェントが Claude Code に作業を頼むと、claude -p で実行し、結果をボイスチャンネルのチャットに投稿する
 import { PassThrough } from "node:stream";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, Events, GatewayIntentBits, MessageFlags } from "discord.js";
+import { Client, Events, GatewayIntentBits } from "discord.js";
 import {
   AudioPlayerStatus,
   EndBehaviorType,
@@ -16,8 +16,9 @@ import OpusScript from "opusscript";
 import { loadAgentId } from "./agent.js";
 import { monoToStereo, toMono16k } from "./audio.js";
 import { loadConfig } from "./config.js";
+import { handlePushButton, jobResultMessage, log, post, quote, resolveOwnerId } from "./discord-common.js";
 import { Conversation } from "./elevenlabs.js";
-import { JobRunner, git, headline, stateLabel } from "./jobs.js";
+import { JobRunner, headline, stateLabel } from "./jobs.js";
 import { discordToken, elevenLabsKey } from "./secrets.js";
 
 const TICK_MS = 100; // ElevenLabs へ音声を送る間隔
@@ -51,26 +52,11 @@ let speech = null; // 再生中のエージェントの音声
 let lastActivity = 0;
 let retryAfter = 0;
 
-function log(...args) {
-  console.log(new Date().toISOString(), ...args);
-}
-
 player.on("error", (err) => log("player error:", err.message));
 player.on(AudioPlayerStatus.Idle, () => {
   speech?.destroy();
   speech = null;
 });
-
-async function resolveOwnerId() {
-  if (process.env.DISCORD_OWNER_ID) return process.env.DISCORD_OWNER_ID;
-  const app = await client.application.fetch();
-  // チームで所有するアプリの場合は owner がチームになるので、環境変数で指定してもらう
-  if (!app.owner?.username) {
-    console.error("The application is owned by a team. Set DISCORD_OWNER_ID to your user ID.");
-    process.exit(1);
-  }
-  return app.owner.id;
-}
 
 // --- ElevenLabs との会話 ---
 
@@ -124,7 +110,7 @@ async function handleToolCall(conv, { tool_name, tool_call_id, parameters }) {
     if (tool_name === "run_claude_code") {
       const job = await runner.start(parameters.repo, parameters.task, { channel: voiceChannel });
       result = `ジョブ${job.id}を開始しました。`;
-      await post(job, `🛠️ ジョブ${job.id}（${job.repo}）を開始しました\n> ${quote(job.task)}`);
+      await post(job.meta.channel, `🛠️ ジョブ${job.id}（${job.repo}）を開始しました\n> ${quote(job.task)}`);
     } else if (tool_name === "get_job_status") {
       result = runner.describe();
     } else if (tool_name === "cancel_job") {
@@ -141,19 +127,9 @@ async function handleToolCall(conv, { tool_name, tool_call_id, parameters }) {
 }
 
 runner.on("done", async (job) => {
-  const minutes = Math.round((job.finishedAt - job.startedAt) / 60_000);
-  log(`job ${job.id} ${job.state} in ${minutes}min`);
-  const lines = [
-    `<@${ownerId}> ジョブ${job.id}（${job.repo}）が${stateLabel(job.state)}（${minutes}分）`,
-    `> ${quote(job.task)}`,
-    "",
-    job.result?.slice(0, 1200) || "(報告なし)",
-  ];
-  if (job.commits) lines.push("", `**コミット**（${job.branch}、未プッシュ）`, codeBlock(`${job.commits}\n\n${job.diffStat}`));
-  if (job.uncommitted) lines.push("", "**コミットされていない変更**", codeBlock(job.uncommitted));
-  const button = new ButtonBuilder().setCustomId(`push:${job.id}`).setLabel("プッシュする").setStyle(ButtonStyle.Primary);
-  const components = job.commits ? [new ActionRowBuilder().addComponents(button)] : [];
-  await post(job, lines.join("\n").slice(0, 2000), components);
+  log(`job ${job.id} ${job.state}`);
+  const { content, components } = jobResultMessage(job, ownerId);
+  await post(job.meta.channel, content, components);
 
   // 通話中なら、エージェントに声で伝えてもらう
   if (conversation?.ready) {
@@ -165,41 +141,7 @@ runner.on("done", async (job) => {
   }
 });
 
-async function post(job, content, components = []) {
-  try {
-    await job.meta.channel?.send({ content, components });
-  } catch (err) {
-    log("failed to post to Discord:", err.message);
-  }
-}
-
-const quote = (text) => text.replace(/\n/g, "\n> ").slice(0, 500);
-const codeBlock = (text) => "```\n" + text.slice(0, 600) + "\n```";
-
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isButton() || !interaction.customId.startsWith("push:")) return;
-  if (interaction.user.id !== ownerId) {
-    await interaction.reply({ content: "オーナーだけが操作できます。", flags: MessageFlags.Ephemeral });
-    return;
-  }
-  const job = runner.get(Number(interaction.customId.slice("push:".length)));
-  if (!job) {
-    await interaction.reply({ content: "ジョブが見つかりません（ボットを再起動したため）。手元でプッシュしてください。" });
-    return;
-  }
-  await interaction.deferReply();
-  try {
-    // ジョブの後にブランチが切り替わっていたら、別の変更を押し出さないよう止める
-    const branch = await git(job.cwd, "rev-parse", "--abbrev-ref", "HEAD");
-    if (branch !== job.branch) throw new Error(`ブランチが ${job.branch} から ${branch} に変わっています。`);
-    await git(job.cwd, "push", "origin", job.branch);
-    await interaction.editReply(`ジョブ${job.id}のコミットを origin/${job.branch} にプッシュしました。`);
-    await interaction.message.edit({ components: [] });
-    log(`job ${job.id} pushed to origin/${job.branch}`);
-  } catch (err) {
-    await interaction.editReply(`プッシュできませんでした: ${err.message.slice(0, 1500)}`);
-  }
-});
+client.on(Events.InteractionCreate, (interaction) => handlePushButton(interaction, { ownerId, runner }));
 
 // --- Discord の音声 ---
 
@@ -271,7 +213,7 @@ function leave() {
 }
 
 client.once(Events.ClientReady, async () => {
-  ownerId = await resolveOwnerId();
+  ownerId = await resolveOwnerId(client);
   log(`logged in as ${client.user.tag}; repos: ${repoNames.join(", ") || "(none)"}`);
   log("waiting for the owner to join a voice channel");
   for (const guild of client.guilds.cache.values()) {
