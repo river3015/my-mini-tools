@@ -13,30 +13,23 @@ func play(_ sound: String) {
 }
 
 enum APIKey {
-    static let keychainService = "voice-input-elevenlabs"
-
     /// Reads the key through /usr/bin/security, which the Keychain item already
     /// trusts, so rebuilding the app does not trigger a Keychain prompt.
-    static func load() throws -> String {
-        if let key = ProcessInfo.processInfo.environment["ELEVENLABS_API_KEY"], !key.isEmpty {
+    static func load(for provider: Provider) -> String? {
+        if let key = ProcessInfo.processInfo.environment[provider.environmentVariable], !key.isEmpty {
             return key
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", keychainService, "-w"]
+        process.arguments = ["find-generic-password", "-s", provider.keychainService, "-w"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
-        try process.run()
+        guard (try? process.run()) != nil else { return nil }
         process.waitUntilExit()
         let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard process.terminationStatus == 0, !output.isEmpty else {
-            throw ConfigError(
-                "ElevenLabs API key not found. Store it in the Keychain:\n"
-                    + "  security add-generic-password -s \(keychainService) -a \"$USER\" -w")
-        }
-        return output
+        return process.terminationStatus == 0 && !output.isEmpty ? output : nil
     }
 }
 
@@ -50,9 +43,10 @@ enum History {
         let time: String
         let raw: String
         let text: String
+        let provider: String
     }
 
-    static func append(raw: String, text: String) {
+    static func append(raw: String, text: String, provider: Provider) {
         do {
             let fm = FileManager.default
             try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -60,7 +54,7 @@ enum History {
             formatter.timeZone = .current
             let encoder = JSONEncoder()
             encoder.outputFormatting = .withoutEscapingSlashes
-            let entry = Entry(time: formatter.string(from: Date()), raw: raw, text: text)
+            let entry = Entry(time: formatter.string(from: Date()), raw: raw, text: text, provider: provider.rawValue)
             let line = String(decoding: try encoder.encode(entry), as: UTF8.self)
 
             var lines = (try? String(contentsOf: url, encoding: .utf8))?

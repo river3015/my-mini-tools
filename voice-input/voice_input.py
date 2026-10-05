@@ -61,6 +61,9 @@ class Config:
     language: str = "ja"
     model: str = "scribe_v2"
     no_verbatim: bool = True
+    # Used by the macOS app only; this script always uses ElevenLabs.
+    providers: list[str] = field(default_factory=lambda: ["elevenlabs", "groq"])
+    groq_model: str = "whisper-large-v3"
     keyterms: list[str] = field(default_factory=list)
     replacements: dict[str, str] = field(default_factory=dict)
 

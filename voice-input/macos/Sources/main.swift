@@ -12,7 +12,7 @@ let minSeconds: TimeInterval = 0.3
 final class Dictation {
     private var config: Config
     private var configMTime: Date?
-    private let apiKey: String
+    private let transcriber: Transcriber
     private let pasteEnabled: Bool
     private let hotkey: Hotkey
     private let recorder = Recorder()
@@ -22,10 +22,10 @@ final class Dictation {
     private let jobs = DispatchQueue(label: "voice-input.jobs")
     private var tap: CFMachPort?
 
-    init(config: Config, apiKey: String, pasteEnabled: Bool) {
+    init(config: Config, transcriber: Transcriber, pasteEnabled: Bool) {
         self.config = config
         self.configMTime = Dictation.mtime()
-        self.apiKey = apiKey
+        self.transcriber = transcriber
         self.pasteEnabled = pasteEnabled
         self.hotkey = Hotkey.all[config.hotkey]!
     }
@@ -113,16 +113,17 @@ final class Dictation {
         reloadConfig()
         let started = Date()
         let raw: String
+        let provider: Provider
         do {
-            raw = try Transcriber.transcribe(audio: wav, filename: "audio.wav", config: config, apiKey: apiKey)
+            (raw, provider) = try transcriber.transcribe(audio: wav, filename: "audio.wav", config: config)
         } catch {
             log("transcription failed: \(error)")
             play("Basso")
             return
         }
         let text = config.apply(to: raw)
-        log(String(format: "%.1fs: ", Date().timeIntervalSince(started)) + text)
-        History.append(raw: raw, text: text)
+        log(String(format: "%.1fs %@: ", Date().timeIntervalSince(started), provider.rawValue) + text)
+        History.append(raw: raw, text: text, provider: provider)
         if pasteEnabled && !text.isEmpty { Paster.paste(text) }
     }
 }
@@ -142,22 +143,31 @@ func main() -> Int32 {
         if args.first == "--check-config" {
             let config = try Config.load()
             print("hotkey=\(config.hotkey) language=\(config.language) model=\(config.model) "
-                + "no_verbatim=\(config.noVerbatim) keyterms=\(config.keyterms) "
+                + "no_verbatim=\(config.noVerbatim) providers=\(config.providers.map(\.rawValue)) "
+                + "groq_model=\(config.groqModel) keyterms=\(config.keyterms) "
                 + "replacements=\(config.replacements.map { "\($0.0)->\($0.1)" })")
             return 0
         }
-        let config = try Config.load()
-        let apiKey = try APIKey.load()
+        var config = try Config.load()
+        let transcriber = Transcriber()
+        let available = Set(transcriber.availableProviders)
+        log("providers: " + config.providers.map { "\($0.rawValue)\(available.contains($0) ? "" : " (no API key)")" }
+            .joined(separator: " -> "))
 
-        if args.first == "--file", args.count == 2 {
+        if args.first == "--file", args.count == 2 || (args.count == 4 && args[2] == "--provider") {
+            if args.count == 4 {
+                guard let provider = Provider(rawValue: args[3]) else { throw ConfigError("unknown provider") }
+                config.providers = [provider]
+            }
             let url = URL(fileURLWithPath: args[1])
-            let raw = try Transcriber.transcribe(
-                audio: try Data(contentsOf: url), filename: url.lastPathComponent, config: config, apiKey: apiKey)
+            let (raw, provider) = try transcriber.transcribe(
+                audio: try Data(contentsOf: url), filename: url.lastPathComponent, config: config)
+            log("provider: \(provider.rawValue)")
             print(config.apply(to: raw))
             return 0
         }
         guard args.isEmpty || args == ["--no-paste"] else {
-            print("usage: VoiceInput [--no-paste | --file AUDIO | --check-config]")
+            print("usage: VoiceInput [--no-paste | --file AUDIO [--provider NAME] | --check-config]")
             return 2
         }
 
@@ -174,7 +184,7 @@ func main() -> Int32 {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         requestPermissions()
-        let dictation = Dictation(config: config, apiKey: apiKey, pasteEnabled: args.isEmpty)
+        let dictation = Dictation(config: config, transcriber: transcriber, pasteEnabled: args.isEmpty)
         try dictation.start()
         app.run()
         return 0

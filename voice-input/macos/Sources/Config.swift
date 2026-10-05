@@ -19,6 +19,9 @@ struct Config {
     var model = "scribe_v2"
     var noVerbatim = true
     var keyterms: [String] = []
+    // Tried in order; a provider without an API key is skipped.
+    var providers: [Provider] = [.elevenlabs, .groq]
+    var groqModel = "whisper-large-v3"
     // Ordered: replacements are applied from top to bottom.
     var replacements: [(String, String)] = []
 
@@ -41,6 +44,15 @@ struct Config {
             case ("model", .string(let s)): config.model = s
             case ("no_verbatim", .bool(let b)): config.noVerbatim = b
             case ("keyterms", .array(let a)): config.keyterms = a
+            case ("providers", .array(let a)):
+                config.providers = try a.map {
+                    guard let p = Provider(rawValue: $0) else {
+                        throw ConfigError(
+                            "unknown provider: \($0) (use \(Provider.allCases.map(\.rawValue).joined(separator: ", ")))")
+                    }
+                    return p
+                }
+            case ("groq_model", .string(let s)): config.groqModel = s
             default: throw ConfigError("unknown key or wrong type: \(key)")
             }
         }

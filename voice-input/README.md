@@ -11,12 +11,12 @@ AI エージェントへの指示を音声で出すためのツール。
 | 実装 | 場所 | 用途 |
 | --- | --- | --- |
 | macOS アプリ（Swift） | `macos/` | 常駐用。権限を VoiceInput.app だけに与えられる |
-| Python スクリプト | `voice_input.py` | ターミナルでの試用、`--file` での確認 |
+| Python スクリプト | `voice_input.py` | ターミナルでの試用、`--file` での確認。ElevenLabs のみ対応 |
 
 ## 仕組み
 
 1. ホットキー（既定は右 Command）を押している間、マイクから 16kHz で録音する。
-2. 離すと、`config.toml` の `keyterms` を付けて Scribe v2 に送る。
+2. 離すと、`config.toml` の `keyterms` を付けて Scribe v2 に送る。失敗したら Groq の Whisper に送る（アプリのみ）。
 3. 置換辞書（`replacements`）を当てる。
 4. クリップボード経由で Cmd+V を送って貼り付け、元のクリップボードの内容を戻す。
 
@@ -32,20 +32,32 @@ AI エージェントへの指示を音声で出すためのツール。
 - macOS 14 以上
 - アプリ: Xcode の Command Line Tools（`swiftc`、`codesign`）
 - Python 版: [uv](https://docs.astral.sh/uv/)
-- ElevenLabs の API キー。権限は Speech to Text のみでよい。
+- ElevenLabs の API キー。権限は Speech to Text と User の Read。
+- （任意）Groq の API キー。ElevenLabs が使えないときの予備。無料プランで 1日 2,000 リクエスト・音声 8 時間まで使える（2026-10 時点）。
 
 ## セットアップ
 
 ```sh
 # API キーをキーチェーンに保存する（プロンプトで入力）
 security add-generic-password -s voice-input-elevenlabs -a "$USER" -w
+security add-generic-password -s voice-input-groq -a "$USER" -w   # 任意
 
 # 設定ファイル
 mkdir -p ~/.config/voice-input
 cp config.example.toml ~/.config/voice-input/config.toml
 ```
 
-API キーは環境変数 `ELEVENLABS_API_KEY` からも読む。環境変数がある場合はそちらを優先する。
+API キーは環境変数 `ELEVENLABS_API_KEY`・`GROQ_API_KEY` からも読む。環境変数がある場合はそちらを優先する。
+
+### サービスの切り替え（アプリのみ）
+
+`providers` に並べた順に試す。
+
+- API キーがないサービスは飛ばす。
+- クレジット切れ（HTTP 402、または本文に `insufficient_credits` / `quota_exceeded`）になったサービスは、1時間飛ばす。
+- それ以外の失敗（認証エラー、レート制限、通信エラーなど）は、その回だけ次のサービスに回す。
+- どのサービスを使ったかは、ログと履歴の `provider` に残る。
+- Groq の Whisper には keyterms の仕組みがないため、keyterms を `prompt`（224 トークンまで）として先頭から約200文字分だけ渡す。`no_verbatim` は効かない。
 
 Python 版をターミナルで動かす場合は、ターミナルアプリに、システム設定の「プライバシーとセキュリティ」で次の権限を与える。
 
@@ -80,7 +92,7 @@ launchd/install.sh uninstall  # 登録を解除し、アプリを消す
 - 再起動: `launchctl kickstart -k gui/$(id -u)/io.github.river3015.voice-input`
 - コードを変えたら `build.sh` と `install.sh` をやり直す。
 
-アプリも `--file 音声ファイル`、`--no-paste`、`--check-config`（設定の読み込み結果を表示）を受け付ける。
+アプリも `--file 音声ファイル [--provider groq]`、`--no-paste`、`--check-config`（設定の読み込み結果を表示）を受け付ける。
 設定ファイルの場所は環境変数 `VOICE_INPUT_CONFIG` で変えられる。
 設定ファイルは、使っている TOML の範囲（文字列、真偽値、文字列の配列、`[replacements]` 表）だけを読む。
 
