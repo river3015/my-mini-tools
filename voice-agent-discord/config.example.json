@@ -6,6 +6,7 @@
   "local": {
     "model": "sonnet",
     "speaker": 3,
-    "speedScale": 1.15
+    "speedScale": 1.15,
+    "textChannelId": "(まとめやジョブの結果を投稿するテキストチャンネルの ID)"
   }
 }

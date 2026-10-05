@@ -4,7 +4,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import { join as joinPath } from "node:path";
 import { Readable } from "node:stream";
-import { Client, Events, GatewayIntentBits } from "discord.js";
+import { Client, Events, GatewayIntentBits, ThreadAutoArchiveDuration } from "discord.js";
 import {
   AudioPlayerStatus,
   EndBehaviorType,
@@ -36,6 +36,7 @@ const DEBUG = process.env.VOICE_DEBUG === "1";
 
 const config = loadConfig();
 const model = config.local.model ?? "sonnet";
+const textChannelId = config.local.textChannelId; // まとめやジョブの結果を投稿するテキストチャンネル
 const runner = new JobRunner(config);
 const repos = runner.repos;
 const repoNames = Object.keys(repos);
@@ -49,9 +50,9 @@ const EARCON = makeEarcon();
 
 let ownerId;
 let connection = null;
-let voiceChannel = null; // ジョブの結果やまとめを投稿する先（ボイスチャンネルのチャット）
+// 今の通話。target は投稿先（テキストチャンネルに作るスレッド）で、最初に投稿するときに作る
+let call = null; // { voiceChannel, startedAt, jobs, target }
 let session = null; // この通話の claude
-let sessionJobs = []; // この通話で頼んだジョブ
 let utterance = null; // 話している途中の発話 { chunks, packets, lastAt }
 let endpointTimer = null;
 let sttChain = Promise.resolve(); // 発話を話した順に文字にする
@@ -197,7 +198,7 @@ function latestHandoff() {
 }
 
 // 通話を抜けたら、まとめを投稿して引き継ぎ文を書き、claude を止める
-async function closeSession(s, channel, jobs) {
+async function closeSession(s, c) {
   if (!s.history.some((h) => h.role === "user")) {
     s.stop();
     return;
@@ -212,7 +213,8 @@ async function closeSession(s, channel, jobs) {
     const { text } = await ended;
     if (!text) throw new Error("empty summary");
     const file = await writeHandoff(s, text);
-    const unpushed = jobs.filter((j) => j.commits && !j.pushed);
+    const channel = await callTarget(c);
+    const unpushed = c.jobs.filter((j) => j.commits && !j.pushed);
     const header = `<@${ownerId}> 通話のまとめ（引き継ぎ文: \`${file.replace(homedir(), "~")}\`）`;
     const chunks = splitMessage(`${header}\n\n${text}`);
     for (const [i, chunk] of chunks.entries()) {
@@ -222,7 +224,7 @@ async function closeSession(s, channel, jobs) {
     log(`summary posted; handoff written to ${file}`);
   } catch (err) {
     log("failed to summarize the call:", err.message);
-    await post(channel, `<@${ownerId}> 通話のまとめを作れませんでした: ${err.message}`);
+    await post(await callTarget(c), `<@${ownerId}> 通話のまとめを作れませんでした: ${err.message}`);
   } finally {
     s.stop();
   }
@@ -242,9 +244,11 @@ function waitTurnEnd(s, ms) {
   });
 }
 
+// 2026-10-06 02:30
+const jstStamp = (date) => date.toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).slice(0, 16);
+
 async function writeHandoff(s, summary) {
-  const now = new Date();
-  const stamp = now.toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).slice(0, 16); // 2026-10-06 02:30
+  const stamp = jstStamp(new Date());
   const lines = [
     "# 引き継ぎ: 音声通話のまとめ",
     "",
@@ -283,6 +287,26 @@ function splitMessage(text, max = 1900) {
   return chunks;
 }
 
+// 投稿先。textChannelId があればそこに通話ごとのスレッドを作り、なければ（作れなければ）ボイスチャンネルのチャットにする
+function callTarget(c) {
+  c.target ??= openThread(c).catch((err) => {
+    log("failed to create a thread; posting to the voice channel chat:", err.message);
+    return c.voiceChannel;
+  });
+  return c.target;
+}
+
+async function openThread(c) {
+  if (!textChannelId) return c.voiceChannel;
+  const channel = await client.channels.fetch(textChannelId);
+  const thread = await channel.threads.create({
+    name: `${jstStamp(c.startedAt)} の通話`,
+    autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+  });
+  log(`created thread "${thread.name}"`);
+  return thread;
+}
+
 // --- ジョブ（claude から MCP のツールで呼ばれる） ---
 
 const mcp = await startMcpServer("bot", {
@@ -298,10 +322,12 @@ const mcp = await startMcpServer("bot", {
       required: ["repo", "task"],
     },
     handler: async ({ repo, task }) => {
-      const job = await runner.start(repo, task, { channel: voiceChannel });
-      sessionJobs.push(job);
+      if (!call) throw new Error("通話中ではないので、ジョブを始められません。");
+      const c = call;
+      const job = await runner.start(repo, task, { call: c });
+      c.jobs.push(job);
       log(`job ${job.id} started: ${task.replace(/\n/g, " ").slice(0, 200)}`);
-      await post(voiceChannel, `🛠️ ジョブ${job.id}（${job.repo}）を開始しました\n> ${quote(job.task)}`);
+      await post(await callTarget(c), `🛠️ ジョブ${job.id}（${job.repo}）を開始しました\n> ${quote(job.task)}`);
       return `ジョブ${job.id}を開始しました。`;
     },
   },
@@ -320,7 +346,7 @@ const mcp = await startMcpServer("bot", {
 runner.on("done", async (job) => {
   log(`job ${job.id} ${job.state}`);
   const { content, components } = jobResultMessage(job, ownerId);
-  await post(job.meta.channel, content, components);
+  await post(await callTarget(job.meta.call), content, components);
   if (session && connection) {
     session.send(
       `[システム通知] ジョブ${job.id}（${job.repo}）が${stateLabel(job.state)}。報告の要点: ${headline(job.result ?? "")}` +
@@ -384,7 +410,7 @@ async function handleUtterance(pcm, packets) {
 }
 
 async function join(channel) {
-  voiceChannel = channel;
+  call = { voiceChannel: channel, startedAt: new Date(), jobs: [], target: null };
   connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: channel.guild.id,
@@ -411,7 +437,6 @@ async function join(channel) {
     .on("error", (err) => log("receive error:", err.message));
   endpointTimer = setInterval(checkEndpoint, 50);
   session = startSession();
-  sessionJobs = [];
   await greet(session);
 }
 
@@ -422,9 +447,10 @@ function leave() {
   stopSpeech();
   if (session) {
     log("call ended; summarizing");
-    closeSession(session, voiceChannel, sessionJobs);
+    closeSession(session, call);
     session = null;
   }
+  call = null;
   if (!connection) return;
   connection.destroy();
   connection = null;

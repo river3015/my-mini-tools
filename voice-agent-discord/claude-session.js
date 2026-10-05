@@ -41,6 +41,9 @@ export class ClaudeSession extends EventEmitter {
       "--include-partial-messages",
       "--permission-mode",
       "dontAsk", // 許可していないツールは確認せずに拒否する
+      // ユーザー設定（グローバルの CLAUDE.md を含む）を読まない。コミットや報告の決まりなど、通話に関係ない指示を持ち込まないため
+      "--setting-sources",
+      "project,local",
       "--append-system-prompt",
       systemPrompt,
       "--allowedTools",
