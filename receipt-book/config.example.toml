@@ -1,0 +1,43 @@
+# ~/.config/receipt-book/config.toml にコピーして使う。書かなかった項目は既定値になる。
+
+# 読み取りに使うモデルと effort（low / medium / high / xhigh / max）。
+# effort に対応しないモデル（Haiku 4.5 など）では effort = "" にする。
+model = "claude-opus-5-5"
+effort = "medium"
+
+# モデルが安全上の理由で応答を断ったとき、Anthropic 推奨の別モデルで読み直す。
+# 対応しないモデルでは false にする。
+fallbacks = true
+
+# API に送る前に、画像の長辺をこのピクセル数まで縮める。
+max_image_px = 2048
+
+# iPhone から写真を入れるフォルダと、取り込んだ画像の保存先（どちらも iCloud Drive）。
+# 取り込んだ画像は archive_dir/processed/YYYY/MM/ に移る。
+inbox_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/receipts/inbox"
+archive_dir = "~/Library/Mobile Documents/com~apple~CloudDocs/receipts"
+
+# データベース。iCloud Drive の同期で壊れないよう、ローカルに置く。
+db_path = "~/Library/Application Support/receipt-book/receipts.db"
+
+# カテゴリ。モデルはこの中から選ぶ。どれにも当てはまらなければ「未分類」になる。
+categories = [
+  "食費",
+  "外食",
+  "日用品",
+  "医療・薬",
+  "衣服・美容",
+  "趣味・娯楽",
+  "交通",
+  "住まい・家具家電",
+  "交際費",
+  "その他",
+]
+
+# 品名に含まれる文字列 → カテゴリ。最優先で当てる。
+[item_rules]
+# "ティッシュ" = "日用品"
+
+# 店名に含まれる文字列 → その店の全品目のカテゴリ。item_rules の次に当てる。
+[store_rules]
+# "スターバックス" = "外食"
