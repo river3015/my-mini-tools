@@ -19,7 +19,10 @@ import { loadConfig } from "./config.js";
 import { handlePushButton, jobResultMessage, log, post, quote, resolveOwnerId } from "./discord-common.js";
 import { Conversation } from "./elevenlabs.js";
 import { JobRunner, headline, stateLabel } from "./jobs.js";
+import { lockBot } from "./lock.js";
 import { discordToken, elevenLabsKey } from "./secrets.js";
+
+lockBot("bot");
 
 const TICK_MS = 100; // ElevenLabs へ音声を送る間隔
 const SILENCE_16K = Buffer.alloc((16000 * 2 * TICK_MS) / 1000); // 黙っている間は無音を送り続ける

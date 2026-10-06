@@ -13,7 +13,10 @@ import {
   getVoiceConnection,
   joinVoiceChannel,
 } from "@discordjs/voice";
+import { lockBot } from "./lock.js";
 import { discordToken } from "./secrets.js";
+
+lockBot("echo");
 
 const SILENCE_MS = 800; // この長さ黙ったら一区切りとみなす
 const MIN_PACKETS = 15; // 20ms/パケット。0.3秒未満は捨てる

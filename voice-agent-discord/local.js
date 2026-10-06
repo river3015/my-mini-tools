@@ -23,9 +23,12 @@ import { handlePushButton, jobResultMessage, log, post, pushButton, quote, resol
 import { JobRunner, git, headline, stateLabel } from "./jobs.js";
 import { ALLOWED_TOOLS, DISALLOWED_TOOLS, SUMMARY_PROMPT, systemPrompt } from "./local-prompts.js";
 import { startMcpServer } from "./mcp.js";
+import { lockBot } from "./lock.js";
 import { discordToken } from "./secrets.js";
 import { Transcriber } from "./stt.js";
 import { Voicevox } from "./voicevox.js";
+
+lockBot("local");
 
 const SILENCE_MS = 700; // この長さ黙ったら話し終わりとみなす
 const MIN_PACKETS = 15; // 20ms/パケット。0.3秒未満の発話（相づちや物音）は捨てる
