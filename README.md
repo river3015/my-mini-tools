@@ -33,5 +33,10 @@ my-mini-tools/
 | 💡 | gitlab-ci-lint | ローカルの `.gitlab-ci.yml` をGitLabのLint APIで検証する |
 | 💡 | branch-cleaner | マージ済みのローカル／リモートブランチを一覧・削除する |
 | 💡 | handoff-check | エージェント用の引き継ぎファイルと現在のブランチ・コミットの整合を確認する |
+| 💡 | ci-watch-notify | GitLab のパイプライン（`glab ci status --live`）の完了を macOS の通知で知らせる |
+| 💡 | status-aggregate | AWS Health と、依存している SaaS のステータスページをまとめて見る |
+| 💡 | subsc-check | サブスクの一覧・月額・次回更新日・解約期限を管理し、更新の数日前に通知する |
+| 💡 | health-export-viz | iPhone のヘルスケアデータを書き出して、睡眠・歩数・体重の推移を見る |
+| 💡 | sleep-wind-down | 就寝時刻の前に、通知・照明・画面をまとめて夜モードに切り替える |
 
 <!-- アイデアが増えたら上の表に行を追加する。完成したらツールのディレクトリへのリンクを付ける。 -->
