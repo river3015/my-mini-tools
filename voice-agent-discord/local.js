@@ -229,7 +229,7 @@ function latestHandoff() {
   }
 }
 
-// 通話を抜けたら、まとめを投稿して引き継ぎ文を書き、claude を止める
+// 通話を抜けたら、まとめを投稿して引き継ぎ文を書き、claude を止める。まとめはメンションを付けるが通知は鳴らさない
 async function closeSession(s, c) {
   if (!s.history.some((h) => h.role === "user")) {
     s.stop();
@@ -252,12 +252,14 @@ async function closeSession(s, c) {
     const chunks = splitMessage(`${header}\n\n${text}`);
     for (const [i, chunk] of chunks.entries()) {
       const last = i === chunks.length - 1;
-      await post(channel, chunk, last ? unpushed.slice(0, 5).map(pushButton) : []);
+      await post(channel, chunk, last ? unpushed.slice(0, 5).map(pushButton) : [], { flags: MessageFlags.SuppressNotifications });
     }
     log(`summary posted; handoff written to ${file}`);
   } catch (err) {
     log("failed to summarize the call:", err.message);
-    await post(await callTarget(c), `<@${ownerId}> 通話のまとめを作れませんでした: ${err.message}`);
+    await post(await callTarget(c), `<@${ownerId}> 通話のまとめを作れませんでした: ${err.message}`, [], {
+      flags: MessageFlags.SuppressNotifications,
+    });
   } finally {
     s.stop();
   }
