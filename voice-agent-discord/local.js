@@ -20,11 +20,12 @@ import { toMono16k } from "./audio.js";
 import { ClaudeSession } from "./claude-session.js";
 import { CONFIG_DIR, loadConfig } from "./config.js";
 import { handlePushButton, jobResultMessage, log, post, pushButton, quote, resolveOwnerId } from "./discord-common.js";
+import { GroqTranscriber, isHallucination, voiceInputKeyterms } from "./groq-stt.js";
 import { JobRunner, git, headline, stateLabel } from "./jobs.js";
 import { ALLOWED_TOOLS, DISALLOWED_TOOLS, SUMMARY_PROMPT, systemPrompt } from "./local-prompts.js";
 import { startMcpServer } from "./mcp.js";
 import { lockBot } from "./lock.js";
-import { discordToken } from "./secrets.js";
+import { discordToken, groqKey } from "./secrets.js";
 import { Transcriber } from "./stt.js";
 import { Voicevox } from "./voicevox.js";
 
@@ -46,6 +47,15 @@ const runner = new JobRunner(config);
 const repos = runner.repos;
 const repoNames = Object.keys(repos);
 const stt = new Transcriber();
+// stt: "groq" なら Groq の Whisper で文字にする。SpeechTranscriber は物音の判定と、Groq が使えないときの予備に使う
+const groq =
+  config.local.stt === "groq"
+    ? new GroqTranscriber({
+        apiKey: groqKey(),
+        model: config.local.groqModel,
+        vocabulary: [...(config.local.vocabulary ?? []), ...repoNames, ...voiceInputKeyterms()],
+      })
+    : null;
 const voicevox = new Voicevox({ speaker: config.local.speaker ?? 3, speedScale: config.local.speedScale ?? 1.15 });
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
@@ -409,16 +419,30 @@ function checkEndpoint() {
   sttChain = sttChain.then(() => handleUtterance(pcm, u.packets));
 }
 
+// Groq と SpeechTranscriber に同時に送る。SpeechTranscriber が空なら物音とみなす
+async function recognize(pcm) {
+  if (!groq) return { text: await stt.transcribe(pcm), by: "apple" };
+  const remote = groq.transcribe(pcm).catch((err) => {
+    log("groq failed; using SpeechTranscriber:", err.message);
+    return null;
+  });
+  const local = await stt.transcribe(pcm);
+  if (!local) return { text: "", by: "apple" };
+  const text = await remote;
+  if (!text || (isHallucination(text) && !isHallucination(local))) return { text: local, by: "apple" };
+  return { text, by: "groq" };
+}
+
 async function handleUtterance(pcm, packets) {
   const started = Date.now();
-  let text;
+  let text, by;
   try {
-    text = await stt.transcribe(pcm);
+    ({ text, by } = await recognize(pcm));
   } catch (err) {
     log("transcription failed:", err.message);
     return;
   }
-  log(`you (${(packets * 0.02).toFixed(1)}s, stt ${Date.now() - started}ms):`, text || "(empty)");
+  log(`you (${(packets * 0.02).toFixed(1)}s, ${by} ${Date.now() - started}ms):`, text || "(empty)");
   if (!text || !session || !connection) return;
   if (!speaking()) {
     play(EARCON);

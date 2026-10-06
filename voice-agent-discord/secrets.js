@@ -20,3 +20,5 @@ export function readSecret(service, envName) {
 export const discordToken = () => readSecret("voice-agent-discord-token", "DISCORD_TOKEN");
 // voice-input の ELEVENLABS_API_KEY（STT 専用）と取り違えないよう、別の名前にしている
 export const elevenLabsKey = () => readSecret("voice-agent-elevenlabs", "ELEVENLABS_AGENT_API_KEY");
+// voice-input と同じキーを使う（STT だけの用途なので共有する）
+export const groqKey = () => readSecret("voice-input-groq", "GROQ_API_KEY");

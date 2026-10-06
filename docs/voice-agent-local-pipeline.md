@@ -40,6 +40,19 @@ ElevenLabs Agents を挟まず、音声認識・応答・音声合成を Mac 上
 - 結論: 日本語では、DictationTranscriber とヒントの組み合わせで用語の精度は上がらなかった。ローカル版は SpeechTranscriber のままにする。
 - 合成音声での比較なので、実際の声では差が変わる可能性がある。
 
+### Groq の Whisper（2026-10-06）
+
+同じ20本を Groq の whisper-large-v3（`language=ja`、`temperature=0`）で文字にした。語彙は DictationTranscriber のときと同じ12語を、カンマ区切りで `prompt` に入れた。
+
+| 条件 | 1本あたり（往復） | 結果の例 |
+| --- | --- | --- |
+| prompt なし | 約 0.5〜0.9 秒 | 「MyMiniTools」「GitLab CI」「agents.md」は取れた。「クロードマイナスP」「TFステート」「クロードコード」はカタカナのまま |
+| prompt あり | 約 0.6〜1.0 秒 | 「my-mini-tools」「Claude-p」「tfstate」「Claude Code」「Terraform」「Terragrunt」「Voice Agent」「Sandbox」。崩れたのは Eddy の「ブランティ」「起きた」くらい |
+
+- SpeechTranscriber や DictationTranscriber より、用語ははっきり良い。合成音声で、英単語の読みはカタカナに寄せている。
+- 物音（0.6 秒のノイズ）や無音を送ると、「ご視聴ありがとうございました」が返った。`no_speech_prob` は 0 で、判定に使えない。SpeechTranscriber は同じ音声で空を返したので、ローカル版では SpeechTranscriber を物音の判定に使う。
+- 無料枠は、Whisper で1分20回、1日2,000回、1時間に音声 7,200 秒、1日に 28,800 秒（[Groq の Rate Limits](https://console.groq.com/docs/rate-limits)）。
+
 ## 応答（Claude Code）
 
 `claude -p --input-format stream-json --output-format stream-json --include-partial-messages` を1プロセスで起動したまま3往復させ、送信から最初の1文（。！？まで）ができるまでを測った。各1回の計測なのでばらつきは大きい。

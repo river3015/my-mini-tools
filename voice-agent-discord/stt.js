@@ -60,7 +60,7 @@ export class Transcriber {
   }
 }
 
-function wavHeader(dataBytes, rate) {
+export function wavHeader(dataBytes, rate) {
   const h = Buffer.alloc(44);
   h.write("RIFF", 0);
   h.writeUInt32LE(36 + dataBytes, 4);

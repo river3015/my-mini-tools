@@ -5,6 +5,12 @@
   "jobTimeoutMinutes": 15,
   "local": {
     "model": "sonnet",
+    "stt": "groq",
+    "vocabulary": [
+      "Discord",
+      "claude -p",
+      "T3 Code"
+    ],
     "speaker": 3,
     "speedScale": 1.15,
     "textChannelId": "(まとめやジョブの結果を投稿するテキストチャンネルの ID)"

@@ -6,7 +6,7 @@ Discord のボイスチャンネルを電話代わりにして、AI エージェ
 
 | 構成 | コマンド | 音声認識 | 応答 | 読み上げ | 返事が始まるまで |
 | --- | --- | --- | --- | --- | --- |
-| ローカル版 | `npm run local` | macOS の SpeechTranscriber | `claude`（サブスクリプション） | VOICEVOX | 約 3〜4 秒 |
+| ローカル版 | `npm run local` | Groq の Whisper（または macOS の SpeechTranscriber） | `claude`（サブスクリプション） | VOICEVOX | 約 3〜4 秒 |
 | ElevenLabs 版 | `npm start` | ElevenLabs Agents | ElevenLabs Agents（作業は Claude Code に依頼） | ElevenLabs Agents | 約 1 秒 |
 
 電話網（Twilio など）を使わないので、番号の取得や通話料が要らない。Discord は 2026-03-01 から通話の E2EE（DAVE）を必須にしたため、DAVE に対応した `@discordjs/voice` 0.19.2 以上を使う。
@@ -34,6 +34,7 @@ Discord のボイスチャンネルを電話代わりにして、AI エージェ
 # トークン・API キーをキーチェーンに保存する（プロンプトで入力）
 security add-generic-password -s voice-agent-discord-token -a "$USER" -w
 security add-generic-password -s voice-agent-elevenlabs -a "$USER" -w   # ElevenLabs 版だけ
+security add-generic-password -s voice-input-groq -a "$USER" -w         # ローカル版で stt を groq にするとき（voice-input と共有）
 
 npm install
 
@@ -57,6 +58,7 @@ ElevenLabs を使わず、Claude のサブスクリプションと Mac 上の無
 | --- | --- |
 | `local.js` | 本体。Discord の音声の送受信、話し終わりの判定、読み上げの順番と割り込み、まとめ |
 | `local-prompts.js` | 常駐させる claude に渡すプロンプトと、許可するツール |
+| `groq-stt.js` | Groq の Whisper（whisper-large-v3）で発話を文字にする。用語は `prompt` で寄せる |
 | `stt/main.swift`・`stt.js` | SpeechTranscriber（ja_JP）で発話を文字にする常駐プログラム。起動時に `swiftc` でビルドする（`stt/stt` はコミットしない） |
 | `claude-session.js` | `claude -p` を stream-json の入出力で常駐させ、返事を文ごとに渡す |
 | `voicevox.js` | VOICEVOX エンジンが動いていなければ起動し、48kHz ステレオで合成する。自分で起動したエンジンは終了時に止める |
@@ -67,10 +69,23 @@ ElevenLabs を使わず、Claude のサブスクリプションと Mac 上の無
 | キー | 既定値 | 内容 |
 | --- | --- | --- |
 | `model` | `sonnet` | 応答に使うモデル |
+| `stt` | `apple` | 音声認識。`groq` にすると Groq の Whisper を使う（下の「音声認識」） |
+| `groqModel` | `whisper-large-v3` | Groq のモデル |
+| `vocabulary` | なし | Groq に `prompt` として渡す用語。リポジトリ名と voice-input の `keyterms` も足す |
 | `speaker` | `3` | VOICEVOX の話者 ID（3 はずんだもん） |
 | `speedScale` | `1.15` | 読み上げの速さ |
 | `bargeIn` | `false` | 読み上げ中に話したら止めるか（下の「割り込み」） |
 | `textChannelId` | なし | まとめやジョブの結果を投稿するテキストチャンネルの ID。なければボイスチャンネルのチャットに投稿する |
+
+### 音声認識
+
+- `stt: "apple"`: macOS の SpeechTranscriber だけを使う。速い（約 0.2 秒）が、英語の用語はカタカナ化や誤認識が多い。
+- `stt: "groq"`: 発話を Groq の Whisper と SpeechTranscriber に同時に送り、SpeechTranscriber が空なら物音として捨て、そうでなければ Groq の結果を使う。Whisper は物音だけの音声にも「ご視聴ありがとうございました」と返すため。
+  - 用語は、`vocabulary`、`config.json` のリポジトリ名、voice-input の `~/.config/voice-input/config.toml` の `keyterms` をつないで、`prompt`（先頭から200文字）として渡す。
+  - Groq が失敗したとき（通信の失敗、レート制限）は SpeechTranscriber の結果を使う。429 が返ったら `retry-after` の間は Groq に送らない。
+  - キーは voice-input と同じ `voice-input-groq` を使う。無料枠（Whisper は1分20回、1時間に音声2時間、1日に8時間）は voice-input と共有になる。
+  - 用語入りの合成音声20本では、語彙を渡すと「Claude-p」「tfstate」「Claude Code」「my-mini-tools」「Terraform」のように取れた。SpeechTranscriber では「クロードマイナスピー」「TFステート」「PFステージ」など。1発話あたり約 0.4〜1.3 秒（2026-10-06、`docs/voice-agent-local-pipeline.md`）。
+- ログの `you (1.2s, groq 650ms)` の `groq`/`apple` は、どちらの結果を使ったか。
 
 ### 投稿先
 
