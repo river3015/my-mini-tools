@@ -205,3 +205,24 @@ export const RANGES = {
   "30d": { seconds: 30 * 24 * 3600, table: "samples_hourly" },
   "90d": { seconds: 90 * 24 * 3600, table: "samples_hourly" },
 };
+
+// `wrangler dev` simulates Access with one identity (a person), so locally the
+// collector may ingest with it. A real AUD tag is a hex string and never equals this.
+export const LOCAL_DEV_AUD = "local-dev";
+
+/**
+ * Who came through Access: "user" for a person who signed in (the identity has
+ * an email), otherwise "service" for the collector's service token, which
+ * carries no email.
+ */
+export function accessCaller(identity) {
+  return typeof identity?.email === "string" && identity.email !== "" ? "user" : "service";
+}
+
+/** Only the service token may ingest; only a person may read the dashboard and API. */
+export function callerAllowed(caller, method, pathname, aud) {
+  if (method === "POST" && pathname === "/api/ingest") {
+    return caller === "service" || aud === LOCAL_DEV_AUD;
+  }
+  return caller === "user";
+}

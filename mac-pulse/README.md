@@ -23,6 +23,7 @@ Mac のメモリ・スワップ・CPU 負荷・ディスク・メモリを使っ
 
 - 送れなかったデータは Mac の `~/.local/state/mac-pulse/spool/` に残し、次の回にまとめて送る（1日分まで）。
 - Worker は、Cloudflare Access を通っていないリクエストをすべて 403 で断る（`ctx.access` の `aud` を `ACCESS_AUD` と照合）。
+- さらに、Access を通った相手で使える API を分ける。`POST /api/ingest` はサービストークン（`getIdentity()` にメールがない）だけ、ダッシュボードと `/api/summary`・`/api/hosts` はログインした人（メールがある）だけ。サービストークンが漏れても、データは読まれない。ローカル（`ACCESS_AUD=local-dev`）では、模擬の人の ID でも送信できる。
 - D1 のスキーマと設計の理由は [worker/migrations/0001_init.sql](worker/migrations/0001_init.sql) のコメントを参照。
 
 ### 送る項目

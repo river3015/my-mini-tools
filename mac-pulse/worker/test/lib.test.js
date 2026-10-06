@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  LOCAL_DEV_AUD,
   REMIND_S,
   ValidationError,
+  accessCaller,
   alertMessage,
   alertTransitions,
+  callerAllowed,
   evaluateAlerts,
   rollupWindow,
   sha256Hex,
@@ -144,4 +147,24 @@ test("alertMessage", () => {
 test("rollupWindow covers the last two complete hours", () => {
   const top = Math.floor(NOW / 3600) * 3600;
   assert.deepEqual(rollupWindow(top + 120), { from: top - 7200, to: top });
+});
+
+test("accessCaller tells a person from the service token by email", () => {
+  assert.equal(accessCaller({ email: "me@example.com", groups: [] }), "user");
+  assert.equal(accessCaller({ email: "" }), "service");
+  assert.equal(accessCaller({ common_name: "abc.access" }), "service");
+  assert.equal(accessCaller(undefined), "service");
+  assert.equal(accessCaller(null), "service");
+});
+
+test("callerAllowed keeps ingest for the service token and reading for people", () => {
+  const aud = "0123abcd";
+  assert.equal(callerAllowed("service", "POST", "/api/ingest", aud), true);
+  assert.equal(callerAllowed("user", "POST", "/api/ingest", aud), false);
+  for (const path of ["/", "/api/summary", "/api/hosts", "/nope"]) {
+    assert.equal(callerAllowed("user", "GET", path, aud), true, path);
+    assert.equal(callerAllowed("service", "GET", path, aud), false, path);
+  }
+  assert.equal(callerAllowed("service", "GET", "/api/ingest", aud), false);
+  assert.equal(callerAllowed("user", "POST", "/api/ingest", LOCAL_DEV_AUD), true);
 });

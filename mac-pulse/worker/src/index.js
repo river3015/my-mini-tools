@@ -1,7 +1,8 @@
 // mac-pulse Worker: stores samples from the collector in D1, serves the
 // dashboard and its API, and sends alerts to Discord on a cron trigger.
-// Every request must come through Cloudflare Access (ctx.access); ingest also
-// needs the per-host bearer token.
+// Every request must come through Cloudflare Access (ctx.access). Ingest is
+// for the collector's service token (plus the per-host bearer token); the
+// dashboard and its API are for a person who signed in.
 
 import dashboard from "./dashboard.html";
 import {
@@ -10,8 +11,10 @@ import {
   RANGES,
   RAW_RETENTION_S,
   ValidationError,
+  accessCaller,
   alertMessage,
   alertTransitions,
+  callerAllowed,
   evaluateAlerts,
   rollupWindow,
   sha256Hex,
@@ -35,6 +38,16 @@ export default {
       return json({ error: "Cloudflare Access is required" }, 403);
     }
     const url = new URL(request.url);
+    const identity = await getIdentity(ctx.access);
+    const caller = accessCaller(identity);
+    // Temporary: confirms in production what a service token's identity looks
+    // like. Logs only key names, never values. Remove once confirmed.
+    if (caller === "service") {
+      console.log(`access service caller, identity keys: ${describeIdentity(identity)}`);
+    }
+    if (!callerAllowed(caller, request.method, url.pathname, env.ACCESS_AUD)) {
+      return json({ error: "not allowed for this Access identity" }, 403);
+    }
     try {
       if (request.method === "POST" && url.pathname === "/api/ingest") {
         return await ingest(request, env);
@@ -68,6 +81,22 @@ export default {
     ctx.waitUntil(runSchedule(env, Math.floor(controller.scheduledTime / 1000)));
   },
 };
+
+// A service token has no user identity; the lookup may then fail or return nothing.
+async function getIdentity(access) {
+  try {
+    return await access.getIdentity();
+  } catch (e) {
+    console.log(`access getIdentity failed: ${e?.name ?? "error"}`);
+    return null;
+  }
+}
+
+function describeIdentity(identity) {
+  if (identity === null || identity === undefined) return String(identity);
+  if (typeof identity !== "object") return typeof identity;
+  return Object.keys(identity).sort().join(",") || "(none)";
+}
 
 async function ingest(request, env) {
   const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
