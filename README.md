@@ -27,6 +27,7 @@ my-mini-tools/
 | ✅ | [voice-input](voice-input/) | 高精度STT（語彙ヒント付き）＋整形で、AIエージェントへの音声入力を改善する（[調査メモ](docs/voice-input-research.md)） |
 | 🚧 | [voice-agent-discord](voice-agent-discord/) | Discord のボイスチャンネルで AI エージェント（ElevenLabs Agents ＋ Claude Code）と音声で話す |
 | 🚧 | [receipt-book](receipt-book/) | iPhone で撮ったレシートを Claude で読み取り、品目ごとの家計簿にする |
+| 🚧 | [room-env](room-env/) | 部屋の CO2・温度・湿度を ESP32 で測って Grafana で見る。ゆくゆくは赤外線でエアコンや照明を操作する |
 | 💡 | aws-whoami | 現在のAWSアカウント・ロール・リージョンを一目で表示する |
 | 💡 | tf-plan-summary | `terraform plan` の出力から削除・置換されるリソースだけを抜き出して要約する |
 | 💡 | gitlab-ci-lint | ローカルの `.gitlab-ci.yml` をGitLabのLint APIで検証する |
