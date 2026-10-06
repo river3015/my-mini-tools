@@ -17,9 +17,9 @@ export async function resolveOwnerId(client) {
   return app.owner.id;
 }
 
-export async function post(channel, content, components = []) {
+export async function post(channel, content, components = [], options = {}) {
   try {
-    return await channel?.send({ content, components });
+    return await channel?.send({ content, components, ...options });
   } catch (err) {
     log("failed to post to Discord:", err.message);
   }

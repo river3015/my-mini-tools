@@ -4,7 +4,7 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import { join as joinPath } from "node:path";
 import { Readable } from "node:stream";
-import { Client, Events, GatewayIntentBits, ThreadAutoArchiveDuration } from "discord.js";
+import { Client, Events, GatewayIntentBits, MessageFlags, ThreadAutoArchiveDuration } from "discord.js";
 import {
   AudioPlayerStatus,
   EndBehaviorType,
@@ -43,6 +43,7 @@ const model = config.local.model ?? "sonnet";
 // 物音でも返事が止まってしまうので、既定では割り込みを受け付けない
 const bargeIn = config.local.bargeIn ?? false;
 const textChannelId = config.local.textChannelId; // まとめやジョブの結果を投稿するテキストチャンネル
+const transcript = config.local.transcript ?? true; // 発言と返事を通話のスレッドに残すか
 const runner = new JobRunner(config);
 const repos = runner.repos;
 const repoNames = Object.keys(repos);
@@ -65,8 +66,8 @@ const EARCON = makeEarcon();
 
 let ownerId;
 let connection = null;
-// 今の通話。target は投稿先（テキストチャンネルに作るスレッド）で、最初に投稿するときに作る
-let call = null; // { voiceChannel, startedAt, jobs, target }
+// 今の通話。target は投稿先（テキストチャンネルに作るスレッド）で、最初に投稿するときに作る。transcript は文字起こしの投稿を順に並べる
+let call = null; // { voiceChannel, startedAt, jobs, target, transcript }
 let session = null; // この通話の claude
 let utterance = null; // 話している途中の発話 { chunks, packets, lastAt }
 let endpointTimer = null;
@@ -171,6 +172,7 @@ function startSession() {
   s.on("external_turn", () => log("message from another session"));
   s.on("turn_end", ({ text, isError, external }) => {
     log(`agent${external ? " (on a message from another session)" : ""}${isError ? " (interrupted or failed)" : ""}:`, text.replace(/\n+/g, " "));
+    if (!external && call && session === s && text) logTranscript(call, `🤖 ${text}${isError ? "\n-# 中断" : ""}`);
     // 届いた本文は出力に出ないので、それを受けた返事を残す
     if (external && call && session === s && text) {
       const c = call;
@@ -243,6 +245,7 @@ async function closeSession(s, c) {
     const { text } = await ended;
     if (!text) throw new Error("empty summary");
     const file = await writeHandoff(s, text);
+    await c.transcript;
     const channel = await callTarget(c);
     const unpushed = c.jobs.filter((j) => j.commits && !j.pushed);
     const header = `<@${ownerId}> 通話のまとめ（引き継ぎ文: \`${file.replace(homedir(), "~")}\`）`;
@@ -335,6 +338,17 @@ async function openThread(c) {
   });
   log(`created thread "${thread.name}"`);
   return thread;
+}
+
+// 発言と返事を、通知を鳴らさずにスレッドに残す。投稿は呼んだ順に並べる
+function logTranscript(c, content) {
+  if (!transcript) return;
+  c.transcript = c.transcript.then(async () => {
+    const target = await callTarget(c);
+    for (const chunk of splitMessage(content)) {
+      await post(target, chunk, [], { flags: MessageFlags.SuppressNotifications, allowedMentions: { parse: [] } });
+    }
+  });
 }
 
 // --- ジョブ（claude から MCP のツールで呼ばれる） ---
@@ -442,8 +456,10 @@ async function handleUtterance(pcm, packets) {
     log("transcription failed:", err.message);
     return;
   }
-  log(`you (${(packets * 0.02).toFixed(1)}s, ${by} ${Date.now() - started}ms):`, text || "(empty)");
+  const elapsed = Date.now() - started;
+  log(`you (${(packets * 0.02).toFixed(1)}s, ${by} ${elapsed}ms):`, text || "(empty)");
   if (!text || !session || !connection) return;
+  if (call) logTranscript(call, `🗣️ ${text}\n-# ${(packets * 0.02).toFixed(1)}秒・${by} ${elapsed}ms`);
   if (!speaking()) {
     play(EARCON);
   } else if (bargeIn) {
@@ -457,7 +473,7 @@ async function handleUtterance(pcm, packets) {
 }
 
 async function join(channel) {
-  call = { voiceChannel: channel, startedAt: new Date(), jobs: [], target: null };
+  call = { voiceChannel: channel, startedAt: new Date(), jobs: [], target: null, transcript: Promise.resolve() };
   connection = joinVoiceChannel({
     channelId: channel.id,
     guildId: channel.guild.id,
