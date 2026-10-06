@@ -12,6 +12,7 @@ import {
   RAW_RETENTION_S,
   ValidationError,
   accessCaller,
+  accessClaims,
   alertMessage,
   alertTransitions,
   callerAllowed,
@@ -38,13 +39,14 @@ export default {
       return json({ error: "Cloudflare Access is required" }, 403);
     }
     const url = new URL(request.url);
+    const claims = accessClaims(request.headers.get("cf-access-jwt-assertion"));
     const identity = await getIdentity(ctx.access);
-    const caller = accessCaller(identity);
-    // Temporary: confirms in production what a service token's identity looks
-    // like. Logs only key names, never values. Remove once confirmed.
-    if (caller === "service") {
-      console.log(`access service caller, identity keys: ${describeIdentity(identity)}`);
-    }
+    const caller = accessCaller(claims, identity);
+    // Temporary: confirms in production how Access describes each caller.
+    // Logs only key names, never values. Remove once confirmed.
+    console.log(
+      `access caller=${caller} jwt=${keyNames(claims)} identity=${keyNames(identity)}`,
+    );
     if (!callerAllowed(caller, request.method, url.pathname, env.ACCESS_AUD)) {
       return json({ error: "not allowed for this Access identity" }, 403);
     }
@@ -82,7 +84,7 @@ export default {
   },
 };
 
-// A service token has no user identity; the lookup may then fail or return nothing.
+// Used only as a fallback for people (e.g. `wrangler dev` sends no Access JWT).
 async function getIdentity(access) {
   try {
     return await access.getIdentity();
@@ -92,10 +94,10 @@ async function getIdentity(access) {
   }
 }
 
-function describeIdentity(identity) {
-  if (identity === null || identity === undefined) return String(identity);
-  if (typeof identity !== "object") return typeof identity;
-  return Object.keys(identity).sort().join(",") || "(none)";
+function keyNames(value) {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== "object") return typeof value;
+  return Object.keys(value).sort().join(",") || "(none)";
 }
 
 async function ingest(request, env) {

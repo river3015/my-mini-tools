@@ -6,6 +6,7 @@ import {
   REMIND_S,
   ValidationError,
   accessCaller,
+  accessClaims,
   alertMessage,
   alertTransitions,
   callerAllowed,
@@ -149,21 +150,36 @@ test("rollupWindow covers the last two complete hours", () => {
   assert.deepEqual(rollupWindow(top + 120), { from: top - 7200, to: top });
 });
 
-test("accessCaller tells a person from the service token by email", () => {
-  assert.equal(accessCaller({ email: "me@example.com", groups: [] }), "user");
-  assert.equal(accessCaller({ email: "" }), "service");
-  assert.equal(accessCaller({ common_name: "abc.access" }), "service");
-  assert.equal(accessCaller(undefined), "service");
-  assert.equal(accessCaller(null), "service");
+const jwt = (claims) =>
+  ["e30", Buffer.from(JSON.stringify(claims)).toString("base64url"), "sig"].join(".");
+
+test("accessClaims reads the JWT payload", () => {
+  assert.deepEqual(accessClaims(jwt({ common_name: "abc.access", sub: "" })), {
+    common_name: "abc.access",
+    sub: "",
+  });
+  assert.equal(accessClaims(null), null);
+  assert.equal(accessClaims("not-a-jwt"), null);
+  assert.equal(accessClaims("a.!!!.c"), null);
+});
+
+test("accessCaller tells the service token from a person", () => {
+  assert.equal(accessCaller({ common_name: "abc.access", sub: "" }, { email: "x@y" }), "service");
+  assert.equal(accessCaller({ email: "me@example.com", sub: "u1" }, null), "user");
+  assert.equal(accessCaller(null, { email: "dev@example.com" }), "user");
+  assert.equal(accessCaller({ common_name: "", email: "" }, { email: "" }), null);
+  assert.equal(accessCaller(null, null), null);
 });
 
 test("callerAllowed keeps ingest for the service token and reading for people", () => {
   const aud = "0123abcd";
   assert.equal(callerAllowed("service", "POST", "/api/ingest", aud), true);
   assert.equal(callerAllowed("user", "POST", "/api/ingest", aud), false);
+  assert.equal(callerAllowed(null, "POST", "/api/ingest", aud), false);
   for (const path of ["/", "/api/summary", "/api/hosts", "/nope"]) {
     assert.equal(callerAllowed("user", "GET", path, aud), true, path);
     assert.equal(callerAllowed("service", "GET", path, aud), false, path);
+    assert.equal(callerAllowed(null, "GET", path, aud), false, path);
   }
   assert.equal(callerAllowed("service", "GET", "/api/ingest", aud), false);
   assert.equal(callerAllowed("user", "POST", "/api/ingest", LOCAL_DEV_AUD), true);

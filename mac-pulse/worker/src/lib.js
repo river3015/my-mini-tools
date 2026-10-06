@@ -210,13 +210,30 @@ export const RANGES = {
 // collector may ingest with it. A real AUD tag is a hex string and never equals this.
 export const LOCAL_DEV_AUD = "local-dev";
 
+/** Claims of the Access JWT (Cf-Access-Jwt-Assertion), or null. Access has verified it. */
+export function accessClaims(jwt) {
+  const part = (jwt ?? "").split(".")[1];
+  if (!part) return null;
+  try {
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)));
+    return typeof claims === "object" && claims !== null ? claims : null;
+  } catch {
+    return null;
+  }
+}
+
+const filled = (v) => typeof v === "string" && v !== "";
+
 /**
- * Who came through Access: "user" for a person who signed in (the identity has
- * an email), otherwise "service" for the collector's service token, which
- * carries no email.
+ * Who came through Access: "service" when the Access JWT names a service token
+ * (common_name is its Client ID), "user" for a person who signed in (an email),
+ * otherwise null.
  */
-export function accessCaller(identity) {
-  return typeof identity?.email === "string" && identity.email !== "" ? "user" : "service";
+export function accessCaller(claims, identity) {
+  if (filled(claims?.common_name)) return "service";
+  if (filled(claims?.email) || filled(identity?.email)) return "user";
+  return null;
 }
 
 /** Only the service token may ingest; only a person may read the dashboard and API. */
