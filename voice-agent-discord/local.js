@@ -506,7 +506,7 @@ function leave() {
 
 client.once(Events.ClientReady, async () => {
   ownerId = await resolveOwnerId(client);
-  log(`logged in as ${client.user.tag}; model: ${model}; repos: ${repoNames.join(", ") || "(none)"}`);
+  log(`logged in as ${client.user.tag}; model: ${model}; stt: ${groq ? "groq" : "apple"}; repos: ${repoNames.join(", ") || "(none)"}`);
   log("waiting for the owner to join a voice channel");
   for (const guild of client.guilds.cache.values()) {
     const state = guild.voiceStates.cache.get(ownerId);
