@@ -147,8 +147,23 @@ function startSession() {
   s.on("sentence", (text) => {
     if (session === s) say(text);
   });
-  s.on("tool_use", (name, input) => log(`tool: ${name} ${JSON.stringify(input).slice(0, 200)}`));
-  s.on("turn_end", ({ text, isError }) => log(`agent${isError ? " (interrupted or failed)" : ""}:`, text.replace(/\n+/g, " ")));
+  s.on("tool_use", (name, input) => {
+    log(`tool: ${name} ${JSON.stringify(input).slice(0, 200)}`);
+    // ほかのセッションへの依頼は、通話のスレッドにも残す
+    if (name === "SendMessage" && call) {
+      const c = call;
+      callTarget(c).then((ch) => post(ch, `📤 セッション \`${input.to}\` に送信しました\n> ${quote(String(input.message ?? ""))}`));
+    }
+  });
+  s.on("external_turn", () => log("message from another session"));
+  s.on("turn_end", ({ text, isError, external }) => {
+    log(`agent${external ? " (on a message from another session)" : ""}${isError ? " (interrupted or failed)" : ""}:`, text.replace(/\n+/g, " "));
+    // 届いた本文は出力に出ないので、それを受けた返事を残す
+    if (external && call && session === s && text) {
+      const c = call;
+      callTarget(c).then((ch) => post(ch, `📥 ほかのセッションから連絡がありました\n> ${quote(text)}`));
+    }
+  });
   s.on("error", (err) => log("claude session error:", err.message));
   s.on("exit", (code, stderr) => {
     log(`claude exited (${code})${stderr ? `: ${stderr.slice(-500)}` : ""}`);

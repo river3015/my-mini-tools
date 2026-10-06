@@ -6,7 +6,7 @@ import { createInterface } from "node:readline";
 
 const SENTENCE_END = /[^。！？!?\n]*[。！？!?\n]+/g;
 
-// emit するイベント: sentence(text), tool_use(name, input), turn_end({ text, isError }), exit(code)
+// emit するイベント: sentence(text), tool_use(name, input), external_turn(), turn_end({ text, isError, external }), exit(code)
 export class ClaudeSession extends EventEmitter {
   constructor({ model, cwd, addDirs = [], systemPrompt, allowedTools, disallowedTools, mcpUrl }) {
     super();
@@ -16,6 +16,7 @@ export class ClaudeSession extends EventEmitter {
     this.busy = false; // 返事を作っている途中
     this.muted = false; // 割り込んだあと、その返事の残りを捨てる
     this.interrupting = false; // 止めた返事の result をまだ受け取っていない
+    this.external = false; // 今の返事は、ほかのセッションからのメッセージで始まった
     this.pendingText = ""; // まだ文として区切れていない返事
     this.turnText = ""; // この返事の全文
     this.history = []; // { role: "user" | "assistant", text }
@@ -99,6 +100,11 @@ export class ClaudeSession extends EventEmitter {
   #onEvent(ev) {
     if (ev.type === "system" && ev.subtype === "init") {
       this.sessionId = ev.session_id;
+    } else if (ev.type === "command_lifecycle" && ev.state === "started" && !this.busy) {
+      // こちらが送っていないのに返事が始まった。ほかのセッションからのメッセージが届いたとき（本文は出力に出ない）
+      this.busy = true;
+      this.external = true;
+      this.emit("external_turn");
     } else if (ev.type === "stream_event") {
       const e = ev.event;
       if (e.type === "content_block_delta" && e.delta?.type === "text_delta") {
@@ -123,11 +129,13 @@ export class ClaudeSession extends EventEmitter {
       this.#flush();
       const text = this.turnText.trim();
       if (text) this.history.push({ role: "assistant", text });
+      const { external } = this;
       this.turnText = "";
+      this.external = false;
       this.busy = false;
       this.muted = false;
       this.interrupting = false;
-      this.emit("turn_end", { text, isError: ev.is_error || ev.subtype !== "success" });
+      this.emit("turn_end", { text, isError: ev.is_error || ev.subtype !== "success", external });
     }
   }
 
