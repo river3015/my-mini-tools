@@ -38,5 +38,9 @@ my-mini-tools/
 | 💡 | subsc-check | サブスクの一覧・月額・次回更新日・解約期限を管理し、更新の数日前に通知する |
 | 💡 | health-export-viz | iPhone のヘルスケアデータを書き出して、睡眠・歩数・体重の推移を見る |
 | 💡 | sleep-wind-down | 就寝時刻の前に、通知・照明・画面をまとめて夜モードに切り替える |
+| 💡 | life-slo | 睡眠・部屋の CO2・食費・運動を SLO にし、エラーバジェットの残りを Grafana で見て、使い切りそうなら Discord に通知する |
+| 💡 | home-oncall | 自作の常駐プロセス（voice-input、Discord Bot、room-env など）の死活を監視し、止まったら通知する |
+| 💡 | walk-and-write | 散歩中に voice-agent-discord へ話した内容から、ブログや SNS の下書きを作る |
+| 💡 | walk-quiz | 勉強用リポジトリのメモから問題を作り、散歩中に Discord の音声で出題・採点する |
 
 <!-- アイデアが増えたら上の表に行を追加する。完成したらツールのディレクトリへのリンクを付ける。 -->
