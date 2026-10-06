@@ -16,8 +16,8 @@ Discord のボイスチャンネルを電話代わりにして、AI エージェ
 1. ✅ エコー Bot（`echo.js`）: DAVE 必須の環境で音声を受信できるかの確認（2026-10-06、DAVE protocol v1 で受信・再生できた）
 2. ✅ ElevenLabs Agents との会話（`bot.js`）
 3. ✅ Claude Code の呼び出し、完了通知、承認ボタン（ElevenLabs 版は実機で会話を確認。声で依頼を通しで試すのはまだ）
-4. 🚧 ローカル版（`local.js`）: 部品を Discord なしでつないだ通し試験は済み。Discord での実機の会話はまだ
-5. ⬜ LaunchAgent で常駐させる
+4. ✅ ローカル版（`local.js`）: Discord での実機の会話、スレッドへの投稿、ほかのセッションへの依頼を確認した（2026-10-06）
+5. 🚧 LaunchAgent で常駐させる（`launchd/install.sh`）: スクリプトは用意した。launchd の下での動作は未確認
 
 ## 必要なもの
 
@@ -113,6 +113,23 @@ ElevenLabs を使わず、Claude のサブスクリプションと Mac 上の無
 - 同じ内容を引き継ぎ文として `~/.agent-handoffs/voice-agent-YYYYMMDD-HHMM.md` に書く。先頭には作成日時、モデル、セッション ID、各リポジトリのブランチと最新コミットを書く。既存の引き継ぎ文を上書きしないよう、通話ごとに別のファイルにする。
 - 次の通話の開始時に、いちばん新しい `voice-agent-*.md` を claude に渡す。
 - ユーザーが一度も話さなかった通話では、まとめを作らない。
+
+### 常駐させる（LaunchAgent）
+
+```sh
+launchd/install.sh            # 登録して起動する（入れ直しにも使う）
+launchd/install.sh stop       # 次のログインまで止める
+launchd/install.sh uninstall  # 止めて登録を消す
+tail -f ~/Library/Logs/voice-agent-discord.log
+```
+
+- ログイン時に起動し、異常終了したら 30 秒おいて起動し直す。`stop`（SIGTERM）で止めたときは起動し直さない。
+- launchd の PATH は最小限なので、`node`・`claude`・`git`・`swiftc`・`security` のディレクトリを登録時に調べて plist に書く。`node` や `claude` の場所が変わったら入れ直す。
+- コードを変えたら `launchd/install.sh` で入れ直す（起動し直すだけで反映される）。
+- Mac がスリープしている間は動かない。復帰すると discord.js が接続し直す。
+- ログは消さないので、大きくなったら手で消す。
+
+`local.js`・`bot.js`・`echo.js` は同じトークンを使うので、`~/.config/voice-agent-discord/bot.pid` で1つしか動かないようにしている。常駐させている間に `npm run local` などを手で動かすと、すぐに終了する。手で動かしている間に常駐の方が起動すると、終了して 30 秒ごとに起動し直し、手で動かしている方を止めると入れ替わる。
 
 ### 気をつけること
 
