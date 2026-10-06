@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>mac-pulse</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --page: #f3f2ef;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #77766f;
+    --grid: #e4e3df;
+    --series-1: #2a78d6;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page: #111110;
+      --surface-1: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #9a998f;
+      --grid: #2e2e2c;
+      --series-1: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .viz-root {
+    min-height: 100vh;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    padding: 12px 12px 40px;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  header { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0; }
+  .muted { color: var(--text-muted); font-size: 13px; }
+  .secondary { color: var(--text-secondary); }
+  .filters { display: flex; gap: 6px; margin: 12px 0; flex-wrap: wrap; align-items: center; }
+  .filters button, .filters select {
+    font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--grid); background: var(--surface-1); color: var(--text-primary);
+  }
+  .filters button[aria-pressed="true"] { font-weight: 700; border-color: var(--text-secondary); }
+  .card { background: var(--surface-1); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .alert { border-left: 4px solid var(--critical); }
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  @media (min-width: 600px) { .tiles { grid-template-columns: repeat(3, 1fr); } }
+  .tile { background: var(--surface-1); border-radius: 12px; padding: 10px 12px; }
+  .tile .label { font-size: 13px; color: var(--text-secondary); }
+  .tile .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 12px; color: var(--text-muted); }
+  .status { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text-primary); }
+  .status svg { flex: none; }
+  h2 { font-size: 15px; margin: 0 0 4px; }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .chart-head .now { font-variant-numeric: tabular-nums; color: var(--text-secondary); font-size: 13px; }
+  .chart { position: relative; touch-action: pan-y; }
+  .chart svg { display: block; width: 100%; height: 150px; overflow: visible; }
+  .tooltip {
+    position: absolute; top: 0; pointer-events: none; display: none;
+    background: var(--surface-1); border: 1px solid var(--grid); border-radius: 8px;
+    padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+  }
+  .tooltip strong { font-size: 14px; font-variant-numeric: tabular-nums; display: block; }
+  .tooltip span { color: var(--text-secondary); }
+  .bars { display: grid; grid-template-columns: minmax(0, 9em) 1fr auto; gap: 6px 8px; align-items: center; font-size: 13px; }
+  .bars .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+  .bars .track { height: 12px; }
+  .bars .fill { height: 12px; border-radius: 0 4px 4px 0; background: var(--series-1); min-width: 2px; }
+  .bars .val { font-variant-numeric: tabular-nums; text-align: right; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: 14px; }
+  .loading main { opacity: 0.55; transition: opacity 0.2s; }
+  ul.jobs { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  ul.jobs li { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+  ul.jobs .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="viz-root" id="root">
+  <header>
+    <h1>mac-pulse</h1>
+    <span id="hostinfo" class="muted"></span>
+  </header>
+  <div class="filters" role="group" aria-label="期間">
+    <button data-range="24h" aria-pressed="true">24時間</button>
+    <button data-range="7d" aria-pressed="false">7日</button>
+    <button data-range="30d" aria-pressed="false">30日</button>
+    <button data-range="90d" aria-pressed="false">90日</button>
+    <select id="host" aria-label="ホスト" hidden></select>
+  </div>
+  <main>
+    <div id="alerts"></div>
+    <div class="tiles" id="tiles"></div>
+    <div id="charts"></div>
+    <section class="card">
+      <h2>メモリを使っているアプリ</h2>
+      <p class="muted" id="proc-note" style="margin:0 0 8px"></p>
+      <div class="bars" id="procs"></div>
+    </section>
+    <section class="card" id="jobs-card" hidden>
+      <h2>常駐ジョブ（launchd）</h2>
+      <ul class="jobs" id="jobs"></ul>
+    </section>
+    <section class="card">
+      <details>
+        <summary>表で見る（期間内の最小・平均・最大）</summary>
+        <table id="table"></table>
+      </details>
+    </section>
+  </main>
+  <p class="muted" id="footer"></p>
+</div>
+<script>
+"use strict";
+// Memory in binary units like Activity Monitor, disk in decimal units like Finder.
+const GIB = 2 ** 30, GB = 1e9;
+const state = { range: "24h", host: null, data: null };
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") node.className = v;
+    else if (k === "style") node.style.cssText = v;
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c);
+  return node;
+};
+const svgEl = (tag, attrs = {}) => {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  return node;
+};
+const fmtMem = (b) => (b / GIB).toFixed(1);
+const fmtDisk = (b) => (b / GB).toFixed(1);
+const fmtMemShort = (b) => b >= GIB ? `${fmtMem(b)} GB` : `${Math.round(b / 2 ** 20)} MB`;
+const fmtTime = (ts, withDate) =>
+  new Date(ts * 1000).toLocaleString("ja-JP", withDate
+    ? { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }
+    : { hour: "2-digit", minute: "2-digit" });
+const ago = (s) => s < 90 ? "1分以内" : s < 3600 ? `${Math.round(s / 60)}分前` :
+  s < 86400 ? `${Math.round(s / 3600)}時間前` : `${Math.round(s / 86400)}日前`;
+
+// Status: never color alone - an icon shape plus a label.
+const STATUS = {
+  good: { color: "var(--good)", label: "正常", icon: "circle" },
+  warning: { color: "var(--warning)", label: "警告", icon: "triangle" },
+  critical: { color: "var(--critical)", label: "危険", icon: "square" },
+};
+function statusChip(kind, text) {
+  const s = STATUS[kind];
+  const icon = svgEl("svg", { width: 12, height: 12, viewBox: "0 0 12 12", "aria-hidden": "true" });
+  icon.append(s.icon === "circle" ? svgEl("circle", { cx: 6, cy: 6, r: 5, fill: s.color })
+    : s.icon === "triangle" ? svgEl("path", { d: "M6 1 L11 11 L1 11 Z", fill: s.color })
+    : svgEl("rect", { x: 1, y: 1, width: 10, height: 10, rx: 2, fill: s.color }));
+  return el("span", { class: "status" }, icon, text ?? s.label);
+}
+const pressureStatus = (p) => p >= 4 ? "critical" : p >= 2 ? "warning" : "good";
+
+function tile(label, value, sub, extra) {
+  const node = el("div", { class: "tile" }, el("div", { class: "label" }, label),
+    el("div", { class: "value" }, value));
+  if (extra) node.append(extra);
+  if (sub) node.append(el("div", { class: "sub" }, sub));
+  return node;
+}
+
+function renderTiles(d) {
+  const t = $("tiles");
+  t.replaceChildren();
+  const l = d.latest;
+  if (!l) { t.append(tile("データ", "なし", "まだ届いていません")); return; }
+  const total = d.host.mem_total_bytes;
+  t.append(
+    tile("メモリ使用", `${fmtMem(l.mem_used_bytes)} GB`, `全体 ${fmtMem(total)} GB・圧縮 ${fmtMem(l.mem_compressed_bytes)} GB`,
+      statusChip(pressureStatus(l.mem_pressure), `プレッシャー: ${STATUS[pressureStatus(l.mem_pressure)].label}`)),
+    tile("スワップ", `${fmtMem(l.swap_used_bytes)} GB`, `確保 ${fmtMem(l.swap_total_bytes)} GB`),
+    tile("ディスク空き", `${fmtDisk(l.disk_free_bytes)} GB`, `全体 ${fmtDisk(d.host.disk_total_bytes)} GB`),
+    tile("負荷（1分）", l.load1.toFixed(1), `5分 ${l.load5.toFixed(1)}`),
+    tile("電源", l.battery_pct === null ? "—" : `${l.battery_pct}%`,
+      l.on_ac === 1 ? "AC 電源" : l.on_ac === 0 ? "バッテリー" : ""),
+    tile("起動から", `${(l.uptime_s / 86400).toFixed(1)} 日`,
+      l.cpu_speed_limit === null ? "" : `CPU 速度制限 ${l.cpu_speed_limit}%`),
+  );
+}
+
+const ALERT_TEXT = { stale: "データが届いていません", mem_pressure: "メモリプレッシャーが危険な水準",
+  disk_low: "ディスクの空きが少ない" };
+function renderAlerts(d) {
+  const box = $("alerts");
+  box.replaceChildren();
+  for (const a of d.alerts) {
+    const text = ALERT_TEXT[a.kind] ?? (a.kind.startsWith("job_down:") ? `${a.kind.slice(9)} が停止` : a.kind);
+    box.append(el("div", { class: "card alert" }, statusChip("critical", text),
+      el("span", { class: "muted" }, `　${fmtTime(a.since, true)} から`)));
+  }
+}
+
+// One single-series line chart per measure (no dual axes). Gaps where the Mac slept are left open.
+function lineChart(parent, { title, values, unit, format, yMax, granularity }) {
+  const card = el("section", { class: "card" });
+  parent.append(card);
+  const last = [...values].reverse().find((v) => v.y !== null);
+  card.append(el("div", { class: "chart-head" }, el("h2", {}, title),
+    el("span", { class: "now" }, last ? `最新 ${format(last.y)} ${unit}` : "")));
+  const wrap = el("div", { class: "chart" });
+  card.append(wrap);
+  // Drawn at the real pixel width so text and strokes are not stretched.
+  const W = Math.max(wrap.clientWidth, 200), H = 150, L = 34, R = 6, T = 8, B = 20;
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img",
+    "aria-label": `${title}の推移` });
+  wrap.append(svg);
+  if (values.length < 2) {
+    card.append(el("p", { class: "muted" }, "データが足りません"));
+    return;
+  }
+  const x0 = values[0].ts, x1 = values.at(-1).ts;
+  const top = yMax ?? (Math.max(...values.map((v) => v.y ?? 0)) * 1.1 || 1);
+  const x = (ts) => L + ((ts - x0) / (x1 - x0 || 1)) * (W - L - R);
+  const y = (v) => T + (1 - v / top) * (H - T - B);
+  for (const f of [0, 0.5, 1]) {
+    svg.append(svgEl("line", { x1: L, x2: W - R, y1: y(top * f), y2: y(top * f), stroke: "var(--grid)",
+      "stroke-width": 1 }));
+    const label = svgEl("text", { x: L - 4, y: y(top * f) + 4, "text-anchor": "end", "font-size": 11,
+      fill: "var(--text-muted)" });
+    label.textContent = format(top * f);
+    svg.append(label);
+  }
+  for (const ts of [x0, x1]) {
+    const label = svgEl("text", { x: x(ts), y: H - 4, "text-anchor": ts === x0 ? "start" : "end",
+      "font-size": 11, fill: "var(--text-muted)" });
+    label.textContent = fmtTime(ts, ts === x0 || granularity === "hour");
+    svg.append(label);
+  }
+  const step = granularity === "hour" ? 3600 : 60;
+  let d = "", prev = null;
+  for (const v of values) {
+    if (v.y === null) { prev = null; continue; }
+    d += `${prev && v.ts - prev.ts <= step * 3 ? "L" : "M"}${x(v.ts).toFixed(1)},${y(v.y).toFixed(1)}`;
+    prev = v;
+  }
+  svg.append(svgEl("path", { d, fill: "none", stroke: "var(--series-1)", "stroke-width": 2,
+    "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+  // Crosshair + tooltip: snaps to the nearest sample; the whole plot is the hit area.
+  const cross = svgEl("line", { y1: T, y2: H - B, stroke: "var(--text-muted)", "stroke-width": 1,
+    visibility: "hidden" });
+  svg.append(cross);
+  const tip = el("div", { class: "tooltip" });
+  wrap.append(tip);
+  const show = (event) => {
+    const rect = svg.getBoundingClientRect();
+    const px = ((event.clientX - rect.left) / rect.width) * W;
+    const ts = x0 + ((px - L) / (W - L - R)) * (x1 - x0);
+    let best = values[0];
+    for (const v of values) if (Math.abs(v.ts - ts) < Math.abs(best.ts - ts)) best = v;
+    if (best.y === null) return hide();
+    const cx = x(best.ts);
+    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    const strong = el("strong", {}, `${format(best.y)} ${unit}`);
+    tip.replaceChildren(strong, el("span", {}, fmtTime(best.ts, true)));
+    tip.style.display = "block";
+    const left = (cx / W) * rect.width;
+    tip.style.left = `${Math.min(Math.max(left - tip.offsetWidth / 2, 0), rect.width - tip.offsetWidth)}px`;
+  };
+  const hide = () => { cross.setAttribute("visibility", "hidden"); tip.style.display = "none"; };
+  wrap.addEventListener("pointermove", show);
+  wrap.addEventListener("pointerdown", show);
+  wrap.addEventListener("pointerleave", hide);
+}
+
+const MEASURES = [
+  { key: "mem_used", title: "メモリ使用", unit: "GB", format: fmtMem, yMax: (d) => d.host.mem_total_bytes },
+  { key: "swap_used", title: "スワップ使用", unit: "GB", format: fmtMem },
+  { key: "disk_free", title: "ディスク空き", unit: "GB", format: fmtDisk },
+  { key: "load1", title: "負荷（1分平均）", unit: "", format: (v) => v.toFixed(1) },
+];
+
+function renderCharts(d) {
+  const box = $("charts");
+  box.replaceChildren();
+  const suffix = d.granularity === "hour" ? "（1時間ごと）" : "";
+  for (const m of MEASURES) {
+    lineChart(box, {
+      title: m.title + suffix, unit: m.unit, format: m.format, granularity: d.granularity,
+      yMax: m.yMax?.(d), values: d.series.map((s) => ({ ts: s.ts, y: s[m.key] })),
+    });
+  }
+  const table = $("table");
+  table.replaceChildren(el("tr", {}, el("th", {}, "項目"), el("th", {}, "最小"), el("th", {}, "平均"), el("th", {}, "最大")));
+  for (const m of MEASURES) {
+    const ys = d.series.map((s) => s[m.key]).filter((v) => v !== null);
+    if (!ys.length) continue;
+    const avg = ys.reduce((a, b) => a + b, 0) / ys.length;
+    table.append(el("tr", {}, el("td", {}, `${m.title}${m.unit ? `（${m.unit}）` : ""}`),
+      el("td", {}, m.format(Math.min(...ys))), el("td", {}, m.format(avg)), el("td", {}, m.format(Math.max(...ys)))));
+  }
+}
+
+function renderProcesses(d) {
+  const box = $("procs");
+  box.replaceChildren();
+  const procs = d.latest?.processes ?? [];
+  $("proc-note").textContent = d.latest ? `${fmtTime(d.latest.ts, true)} 時点・実メモリ（RSS）の合計` : "";
+  const max = Math.max(1, ...procs.map((p) => p.rss_bytes));
+  for (const p of procs) {
+    const name = el("span", { class: "name", title: p.name });
+    name.textContent = p.count > 1 ? `${p.name} ×${p.count}` : p.name;
+    box.append(name,
+      el("div", { class: "track" }, el("div", { class: "fill", style: `width:${(p.rss_bytes / max) * 100}%` })),
+      el("span", { class: "val" }, fmtMemShort(p.rss_bytes)));
+  }
+}
+
+function renderJobs(d) {
+  const jobs = Object.entries(d.latest?.jobs ?? {});
+  $("jobs-card").hidden = jobs.length === 0;
+  $("jobs").replaceChildren(...jobs.map(([label, j]) => {
+    const name = el("span", { class: "label" });
+    name.textContent = label;
+    return el("li", {}, name, j.pid === null
+      ? statusChip("critical", `停止（終了コード ${j.last_exit ?? "不明"}）`)
+      : statusChip("good", "動作中"));
+  }));
+}
+
+async function load() {
+  $("root").classList.add("loading");
+  try {
+    if (state.host === null) {
+      const hosts = await (await fetch("/api/hosts")).json();
+      const select = $("host");
+      select.replaceChildren(...hosts.map((h) => { const o = el("option"); o.textContent = h.name; return o; }));
+      select.hidden = hosts.length < 2;
+      state.host = hosts[0]?.name ?? "";
+    }
+    const params = new URLSearchParams({ range: state.range });
+    if (state.host) params.set("host", state.host);
+    const res = await fetch(`/api/summary?${params}`);
+    if (!res.ok) throw new Error((await res.json()).error ?? res.status);
+    const d = await res.json();
+    state.data = d;
+    const age = d.latest ? d.now - d.latest.ts : null;
+    $("hostinfo").textContent = `${d.host.name}（${d.host.model ?? ""}）・` +
+      (age === null ? "データなし" : `最終受信 ${ago(age)}`);
+    renderAlerts(d); renderTiles(d); renderCharts(d); renderProcesses(d); renderJobs(d);
+    $("footer").textContent = `${new Date().toLocaleTimeString("ja-JP")} 更新・1分ごとに自動更新`;
+  } catch (e) {
+    $("footer").textContent = `読み込みに失敗しました: ${e.message}`;
+  } finally {
+    $("root").classList.remove("loading");
+  }
+}
+
+for (const b of document.querySelectorAll("[data-range]")) {
+  b.addEventListener("click", () => {
+    state.range = b.dataset.range;
+    for (const o of document.querySelectorAll("[data-range]")) o.setAttribute("aria-pressed", o === b);
+    load();
+  });
+}
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => state.data && renderCharts(state.data), 150);
+});
+$("host").addEventListener("change", (e) => { state.host = e.target.value; load(); });
+setInterval(() => { if (!document.hidden) load(); }, 60_000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+load();
+</script>
+</body>
+</html>

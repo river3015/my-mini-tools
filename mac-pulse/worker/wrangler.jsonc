@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mac-pulse",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mac-pulse",
+      // Replace with the id printed by `npx wrangler d1 create mac-pulse`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Alerts every 5 minutes; the run at minute 0 also builds the hourly rollup.
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    // Alert when no sample arrives for this many minutes. 0 disables it
+    // (a laptop that sleeps at night would otherwise alert every night).
+    "STALE_MINUTES": "0",
+    "DISK_LOW_GB": "10",
+    "TZ": "Asia/Tokyo"
+  },
+  // Secrets (wrangler secret put): ACCESS_AUD, DISCORD_WEBHOOK_URL (optional).
+  // `wrangler dev` simulates Cloudflare Access with this identity; set
+  // ACCESS_AUD=local-dev in .dev.vars to match.
+  "access": {
+    "dev": { "aud": "local-dev", "identity": { "email": "dev@example.com" } }
+  },
+  "observability": { "enabled": true }
+}

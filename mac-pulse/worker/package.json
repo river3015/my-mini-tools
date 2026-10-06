@@ -1,0 +1,16 @@
+{
+  "name": "mac-pulse-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/",
+    "migrate:local": "wrangler d1 migrations apply mac-pulse --local",
+    "migrate:remote": "wrangler d1 migrations apply mac-pulse --remote",
+    "add-host": "node scripts/add-host.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}
