@@ -36,6 +36,8 @@ const DEBUG = process.env.VOICE_DEBUG === "1";
 
 const config = loadConfig();
 const model = config.local.model ?? "sonnet";
+// 物音でも返事が止まってしまうので、既定では割り込みを受け付けない
+const bargeIn = config.local.bargeIn ?? false;
 const textChannelId = config.local.textChannelId; // まとめやジョブの結果を投稿するテキストチャンネル
 const runner = new JobRunner(config);
 const repos = runner.repos;
@@ -372,8 +374,8 @@ function onOwnerPacket(packet) {
   utterance.chunks.push(toMono16k(pcm));
   utterance.packets++;
   utterance.lastAt = Date.now();
-  // 一定の長さ話したら、読み上げや返事の途中でも止めてこちらの話を聞く
-  if (utterance.packets === MIN_PACKETS && (speaking() || session?.busy)) {
+  // 一定の長さ話したら、読み上げや返事の途中でも止めてこちらの話を聞く（bargeIn を有効にしたときだけ）
+  if (bargeIn && utterance.packets === MIN_PACKETS && (speaking() || session?.busy)) {
     log("barge-in");
     stopSpeech();
     session?.interrupt();
@@ -400,12 +402,15 @@ async function handleUtterance(pcm, packets) {
   }
   log(`you (${(packets * 0.02).toFixed(1)}s, stt ${Date.now() - started}ms):`, text || "(empty)");
   if (!text || !session || !connection) return;
-  // 話している間に読み上げが始まっていたら、ここで止める
-  if (speaking()) {
+  if (!speaking()) {
+    play(EARCON);
+  } else if (bargeIn) {
+    // 話している間に読み上げが始まっていたら、ここで止める
     stopSpeech();
     session.interrupt();
+    play(EARCON);
   }
-  play(EARCON);
+  // 割り込まない場合は読み上げを続け、発言は claude に送る（返事の途中なら同じ返事に取り込まれる）
   session.send(text);
 }
 
