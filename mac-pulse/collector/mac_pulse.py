@@ -254,7 +254,9 @@ def post(endpoint: str, samples: list[dict], headers: dict[str, str]) -> None:
     request = urllib.request.Request(
         endpoint.rstrip("/") + "/api/ingest",
         data=json.dumps({"samples": samples}).encode(),
-        headers={"Content-Type": "application/json", **headers},
+        # Cloudflare's Browser Integrity Check rejects urllib's default
+        # User-Agent ("Python-urllib/3.x") with error 1010.
+        headers={"Content-Type": "application/json", "User-Agent": "mac-pulse", **headers},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=10) as response:
