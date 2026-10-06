@@ -23,7 +23,7 @@ Mac のメモリ・スワップ・CPU 負荷・ディスク・メモリを使っ
 
 - 送れなかったデータは Mac の `~/.local/state/mac-pulse/spool/` に残し、次の回にまとめて送る（1日分まで）。
 - Worker は、Cloudflare Access を通っていないリクエストをすべて 403 で断る（`ctx.access` の `aud` を `ACCESS_AUD` と照合）。
-- さらに、Access を通った相手で使える API を分ける。`POST /api/ingest` はサービストークン（Access の JWT `Cf-Access-Jwt-Assertion` に `common_name` がある）だけ、ダッシュボードと `/api/summary`・`/api/hosts` はログインした人（メールがある）だけ。本番ではサービストークンでも `getIdentity()` だけでは人と判定されたため、判定は JWT を優先する。サービストークンが漏れても、データは読まれない。ローカル（`ACCESS_AUD=local-dev`）では、模擬の人の ID でも送信できる。
+- さらに、Access を通った相手で使える API を分ける。`POST /api/ingest` はサービストークン（Access の JWT `Cf-Access-Jwt-Assertion` に `common_name` がある）だけ、ダッシュボードと `/api/summary`・`/api/hosts` はログインした人（メールがある）だけ。本番では、サービストークンの JWT に `common_name` があり `getIdentity()` は値を返さないこと、人の JWT には `email` があることを確かめた（2026-10-07）。サービストークンが漏れても、データは読まれない。ローカル（`ACCESS_AUD=local-dev`）では、模擬の人の ID でも送信できる。
 - D1 のスキーマと設計の理由は [worker/migrations/0001_init.sql](worker/migrations/0001_init.sql) のコメントを参照。
 
 ### 送る項目

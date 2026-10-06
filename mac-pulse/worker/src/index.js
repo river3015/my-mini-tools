@@ -40,13 +40,8 @@ export default {
     }
     const url = new URL(request.url);
     const claims = accessClaims(request.headers.get("cf-access-jwt-assertion"));
-    const identity = await getIdentity(ctx.access);
+    const identity = claims ? null : await getIdentity(ctx.access);
     const caller = accessCaller(claims, identity);
-    // Temporary: confirms in production how Access describes each caller.
-    // Logs only key names, never values. Remove once confirmed.
-    console.log(
-      `access caller=${caller} jwt=${keyNames(claims)} identity=${keyNames(identity)}`,
-    );
     if (!callerAllowed(caller, request.method, url.pathname, env.ACCESS_AUD)) {
       return json({ error: "not allowed for this Access identity" }, 403);
     }
@@ -92,12 +87,6 @@ async function getIdentity(access) {
     console.log(`access getIdentity failed: ${e?.name ?? "error"}`);
     return null;
   }
-}
-
-function keyNames(value) {
-  if (value === null || value === undefined) return String(value);
-  if (typeof value !== "object") return typeof value;
-  return Object.keys(value).sort().join(",") || "(none)";
 }
 
 async function ingest(request, env) {
