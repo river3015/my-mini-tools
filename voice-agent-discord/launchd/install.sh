@@ -54,16 +54,15 @@ if pid=$(running_pid); then
 fi
 
 # launchd starts jobs with a minimal PATH. Resolve the commands here and pass their directories.
-path_dirs=()
+LAUNCH_PATH=""
+add_path() {
+  [[ ":$LAUNCH_PATH:" == *":$1:"* ]] || LAUNCH_PATH="${LAUNCH_PATH:+$LAUNCH_PATH:}$1"
+}
 for cmd in node claude git swiftc security; do
   bin=$(command -v "$cmd") || { echo "$cmd not found in PATH" >&2; exit 1; }
-  d=$(dirname "$bin")
-  [[ " ${path_dirs[*]} " == *" $d "* ]] || path_dirs+=("$d")
+  add_path "$(dirname "$bin")"
 done
-for d in /usr/bin /bin /usr/sbin /sbin; do
-  [[ " ${path_dirs[*]} " == *" $d "* ]] || path_dirs+=("$d")
-done
-LAUNCH_PATH=$(IFS=:; echo "${path_dirs[*]}")
+for d in /usr/bin /bin /usr/sbin /sbin; do add_path "$d"; done
 NODE=$(command -v node)
 
 [[ -d "$DIR/node_modules" ]] || (cd "$DIR" && npm install)

@@ -17,7 +17,7 @@ Discord のボイスチャンネルを電話代わりにして、AI エージェ
 2. ✅ ElevenLabs Agents との会話（`bot.js`）
 3. ✅ Claude Code の呼び出し、完了通知、承認ボタン（ElevenLabs 版は実機で会話を確認。声で依頼を通しで試すのはまだ）
 4. ✅ ローカル版（`local.js`）: Discord での実機の会話、スレッドへの投稿、ほかのセッションへの依頼を確認した（2026-10-06）
-5. 🚧 LaunchAgent で常駐させる（`launchd/install.sh`）: スクリプトは用意した。launchd の下での動作は未確認
+5. 🚧 LaunchAgent で常駐させる（`launchd/install.sh`）: 起動（キーチェーン、VOICEVOX、SpeechTranscriber の準備、ログイン）、停止、異常終了からの再起動、子プロセスの後片付けを確認した。launchd の下での通話は未確認
 
 ## 必要なもの
 
@@ -127,6 +127,7 @@ tail -f ~/Library/Logs/voice-agent-discord.log
 - launchd の PATH は最小限なので、`node`・`claude`・`git`・`swiftc`・`security` のディレクトリを登録時に調べて plist に書く。`node` や `claude` の場所が変わったら入れ直す。
 - コードを変えたら `launchd/install.sh` で入れ直す（起動し直すだけで反映される）。
 - Mac がスリープしている間は動かない。復帰すると discord.js が接続し直す。
+- `kill -9` などで落ちても、launchd がプロセスグループごと片付けるので、VOICEVOX や stt は残らない（2026-10-06 に確認）。
 - ログは消さないので、大きくなったら手で消す。
 
 `local.js`・`bot.js`・`echo.js` は同じトークンを使うので、`~/.config/voice-agent-discord/bot.pid` で1つしか動かないようにしている。常駐させている間に `npm run local` などを手で動かすと、すぐに終了する。手で動かしている間に常駐の方が起動すると、終了して 30 秒ごとに起動し直し、手で動かしている方を止めると入れ替わる。
