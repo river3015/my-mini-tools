@@ -16,10 +16,29 @@ ElevenLabs Agents を挟まず、音声認識・応答・音声合成を Mac 上
 | mlx-whisper small | 0.47 秒 | 「電気」「ウェブスターち」など誤りあり | 誤りが多い |
 
 - SpeechTranscriber は日本語（ja_JP）に対応し、初回に言語のアセットをダウンロードした。音声認識の権限の確認は出なかった。
-- SpeechTranscriber では `AnalysisContext.contextualStrings`（語彙のヒント）を渡しても結果は変わらなかった。
-- DictationTranscriber（`.shortDictation`）は、同じ書き方では結果が空だった（原因は未調査）。
+- SpeechTranscriber では `AnalysisContext.contextualStrings`（語彙のヒント）を渡しても結果は変わらなかった。語彙のヒントを使うのは DictationTranscriber だけで、SpeechTranscriber は無視するという報告がある（下の「DictationTranscriber と語彙のヒント」）。
+- DictationTranscriber（`.shortDictation`）は、同じ書き方では結果が空だった。確定（`isFinal`）の結果を出さずに終わり、暫定の結果だけを返していたため。
 - 合成音声は Kyoko が英単語を日本語読みするため、実際の発話より不利な条件になっている。誤認識がカタカナ読み（「タラフォームのプラン」など）なら、Claude はそのまま意味を取れる見込み。
 - 「無音で」が「部員で」になる誤りは、SpeechTranscriber と whisper turbo の両方で起きた。
+
+### DictationTranscriber と語彙のヒント（2026-10-06）
+
+用語の誤認識を減らせるかを確かめるため、短い口述向けの DictationTranscriber（`.shortDictation`）に語彙のヒント（`contextualStrings`）を渡して、SpeechTranscriber と比べた。
+
+- テスト音声: 技術用語を含む10文を、`say` の Kyoko と Eddy で読ませた20本（16kHz モノラル）。用語はカタカナで書いて、日本人が話すときの読みに近づけた。
+- ヒント: voice-input の keyterms（Terraform、Terragrunt、GitLab CI、Claude Code、tfstate、AGENTS.md）と、my-mini-tools、sandbox、voice-agent、Discord、claude -p、T3 Code の12語。
+- DictationTranscriber は、最後の暫定の結果も拾うようにした。
+
+| 方式 | 1本あたり | 結果 |
+| --- | --- | --- |
+| SpeechTranscriber | 0.20 秒 | 20本中、Kyoko の大半は読みどおりのカタカナで取れた。Eddy は崩れが多い |
+| DictationTranscriber | 0.71 秒 | 文頭を落とすことが多い（「マイミニツールズの」が消える、「クロード」が「ロード」になる）。全体に SpeechTranscriber より悪い |
+| DictationTranscriber とヒント | 0.78 秒 | ヒントの語で返ったのは「Terragrunt」の1本だけ。ほかに「Discord」「TFステート」が直った例があるが、ほとんどはヒントなしと同じ |
+
+- 文頭に0.5秒の無音を足しても、DictationTranscriber の文頭の欠けは一部しか直らず、ヒントの効きも変わらなかった。
+- 同じ音声でも、実行ごとに結果が少し変わる。
+- 結論: 日本語では、DictationTranscriber とヒントの組み合わせで用語の精度は上がらなかった。ローカル版は SpeechTranscriber のままにする。
+- 合成音声での比較なので、実際の声では差が変わる可能性がある。
 
 ## 応答（Claude Code）
 
