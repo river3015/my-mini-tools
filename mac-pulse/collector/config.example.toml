@@ -1,0 +1,11 @@
+# ~/.config/mac-pulse/config.toml にコピーして使う。
+
+# デプロイした Worker の URL
+endpoint = "https://mac-pulse.<your-subdomain>.workers.dev"
+
+# 動いているかを送る launchd ジョブのラベル（前方一致）。止まっていると通知する。
+# 常駐しないジョブ（定期実行など）は入れない。
+watch_jobs = [
+  "io.github.river3015.voice-input",
+  "io.github.river3015.voice-agent-discord",
+]
