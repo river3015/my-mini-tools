@@ -7,8 +7,8 @@
     {
       "binding": "DB",
       "database_name": "mac-pulse",
-      // Replace with the id printed by `npx wrangler d1 create mac-pulse`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // From `npx wrangler d1 create mac-pulse`.
+      "database_id": "d61b2120-8b16-4e73-aa33-85ac330f6f1c",
       "migrations_dir": "migrations"
     }
   ],
