@@ -2,11 +2,12 @@
 
 部屋の CO2・温度・湿度を ESP32 で測って Grafana で見る。ゆくゆくは赤外線でエアコンや照明を操作し、条件に応じて自動で動かす。
 
-まだ部品の到着待ちで、コードはない。このファイルは計画のメモ。
+段階1の途中。ESPHome の設定は [esphome/](esphome/) にある。
 
 ## 状態
 
-- 2026-10-06: 部品を購入した（下表）。届いたら「最初の作業」から始める。
+- 2026-10-06: 部品を購入した（下表）。
+- 2026-10-07: 部品が届いた。ATOMS3 Lite 用の ESPHome の設定を書き、`esphome config` が通ることを確かめた。実機への書き込みはまだ。
 
 ## 購入済みの部品
 
@@ -46,18 +47,27 @@
 5. （任意）`kind: Aircon` の Operator。赤外線は一方通行なので、温度の変化から実際の状態を推定して送り直す reconcile ループにする。
 6. （任意）voice-agent-discord に「部屋の状態」を答えるツールや家電を操作するツールを足す。
 
-## 最初の作業（部品が届いたら）
+## 最初の作業
 
-1. Mac に Docker（Docker Desktop か OrbStack）があるか確認する。
-2. ESPHome をインストールし、ATOMS3 Lite 用の YAML を書く。
-   - `i2c`（ATOMS3 Lite の Grove ポートのピン）、`sensor: platform: scd4x`、`web_server`、`prometheus` を入れる。
-   - Wi-Fi のパスワードは `secrets.yaml` に書き、コミットしない。
+1. ~~Mac に Docker があるか確認する。~~ Docker Desktop の CLI はある。使う前にアプリを起動する。
+2. ~~ESPHome をインストールし、ATOMS3 Lite 用の YAML を書く。~~ `uv tool install esphome` で入れ、[esphome/room-env.yaml](esphome/room-env.yaml) を書いた。
 3. USB で書き込み、`http://<IP>/metrics` に CO2・温度・湿度が出るか確認する。2回目以降は OTA で更新する。
 4. docker-compose で Prometheus と Grafana を立て、`/metrics` を収集してダッシュボードを作る。
 
+## 書き込み
+
+```sh
+cd room-env/esphome
+cp secrets.yaml.example secrets.yaml   # Wi-Fi などを入れる。鍵は openssl rand -base64 32 で作る
+esphome run room-env.yaml              # 初回は USB。2回目以降は OTA を選べる
+esphome logs room-env.yaml             # 起動ログの I2C スキャンに 0x62 が出れば SCD40 を認識している
+```
+
+- OTA は `api` と同じ鍵で暗号化する。`web_server` の平文の `/update` は無効にした。
+
 ## 未確認・決めること
 
-- ATOMS3 Lite の Grove ポートの SDA/SCL のピン番号（ESPHome の設定に要る）。
+- ATOMS3 Lite の内蔵 RGB LED・ボタン・赤外線 LED のピン番号。公式ドキュメントの仕様表に載っていない。Grove ポートは SDA が G2、SCL が G1（公式ドキュメントで確認済み）。
 - ATOMS3 Lite の内蔵赤外線 LED がエアコンまで届くか。出力が小さいと推測している。届かなければ外付けの赤外線ユニットを買う。
 - エアコンのメーカー・型番。ESPHome の `climate_ir` が対応していれば、リモコンの信号を学習しなくても操作できる。
 - 照明が赤外線リモコン式か。

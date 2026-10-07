@@ -1,0 +1,56 @@
+# ATOMS3 Lite（ESP32-S3FN8, 8MB flash）＋ SCD40 ユニット（Grove）
+esphome:
+  name: room-env
+  friendly_name: Room Env
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    encryption:
+      key: !secret api_encryption_key
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: Room-Env Fallback
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+web_server:
+  version: 3
+  ota: false # 平文の /update から書き込めないようにする
+
+# http://<IP>/metrics
+prometheus:
+
+# Grove ポート（M5Stack の公式ドキュメント: SDA=G2, SCL=G1）
+i2c:
+  sda: GPIO2
+  scl: GPIO1
+  scan: true # 起動ログに 0x62 が出れば SCD40 を認識している
+
+sensor:
+  - platform: scd4x
+    co2:
+      name: CO2
+    temperature:
+      name: Temperature
+    humidity:
+      name: Humidity
+    update_interval: 30s
+    # 自己発熱の分。別の温度計と比べてから決める
+    temperature_offset: 0
