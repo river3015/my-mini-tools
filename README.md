@@ -29,6 +29,7 @@ my-mini-tools/
 | 🚧 | [receipt-book](receipt-book/) | iPhone で撮ったレシートを Claude で読み取り、品目ごとの家計簿にする |
 | 🚧 | [room-env](room-env/) | 部屋の CO2・温度・湿度を ESP32 で測って Grafana で見る。ゆくゆくは赤外線でエアコンや照明を操作する |
 | 🚧 | [mac-pulse](mac-pulse/) | Mac のメモリ・スワップ・ディスクなどを1分ごとに Cloudflare（Worker ＋ D1）へ送り、出先のスマホで見る。危険なときは Discord に通知する |
+| 🚧 | [attn](attn/) | 複数の AI エージェント（Claude Code、Codex）のセッションのうち、自分を待っているものを1か所に集めて見せる（[調査メモ](docs/attn-research.md)） |
 | 💡 | aws-whoami | 現在のAWSアカウント・ロール・リージョンを一目で表示する |
 | 💡 | tf-plan-summary | `terraform plan` の出力から削除・置換されるリソースだけを抜き出して要約する |
 | 💡 | gitlab-ci-lint | ローカルの `.gitlab-ci.yml` をGitLabのLint APIで検証する |

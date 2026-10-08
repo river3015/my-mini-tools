@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>attn</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f6f4; --card: #fff; --fg: #1d1d1b; --muted: #6b6b66; --line: #e2e2dc;
+    --red: #c62828; --amber: #b26a00; --blue: #1565c0; --grey: #757575; --purple: #6a1b9a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --card: #20201f; --fg: #ecece8; --muted: #a0a09a; --line: #34342f;
+      --red: #ef5350; --amber: #ffb74d; --blue: #64b5f6; --grey: #9e9e9e; --purple: #ce93d8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; background: var(--bg); color: var(--fg); }
+  header { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; z-index: 1; }
+  header h1 { font-size: 16px; margin: 0; }
+  .count { color: var(--muted); }
+  .count b { color: var(--fg); }
+  .wip-over { color: var(--red); font-weight: 600; }
+  main { max-width: 980px; margin: 0 auto; padding: 8px 16px 40px; }
+  h2 { font-size: 13px; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--grey); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+  .card.needs_approval, .card.needs_input { border-left-color: var(--red); }
+  .card.stalled { border-left-color: var(--purple); }
+  .card.your_turn { border-left-color: var(--amber); }
+  .card.working { border-left-color: var(--blue); }
+  .card.done { opacity: .7; }
+  .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .badge { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+  .needs_approval .badge, .needs_input .badge { color: var(--red); }
+  .stalled .badge { color: var(--purple); }
+  .your_turn .badge { color: var(--amber); }
+  .working .badge { color: var(--blue); }
+  .done .badge { color: var(--grey); }
+  .title { font-weight: 600; flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .where { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+  .hint { font-size: 12px; margin-top: 4px; }
+  dl { margin: 8px 0 0; display: grid; grid-template-columns: 6.5em 1fr; gap: 4px 8px; }
+  dt { color: var(--muted); font-size: 12px; }
+  dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: hidden; }
+  dd.open { max-height: none; }
+  dd.more { cursor: pointer; }
+  .actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 5px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  a { color: var(--blue); }
+  .empty { color: var(--muted); padding: 12px 0; }
+  .error { color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>attn</h1>
+  <span class="count" id="counts"></span>
+  <span id="wip"></span>
+  <span class="meta" id="updated"></span>
+</header>
+<main id="main"></main>
+<script>
+const SECTIONS = [
+  { title: "あなた待ち", statuses: ["needs_approval", "needs_input", "stalled", "your_turn"], empty: "待たせているセッションはありません。" },
+  { title: "作業中", statuses: ["working"], empty: "動いているセッションはありません。" },
+  { title: "確認済み", statuses: ["done"], empty: "" },
+];
+const LABEL = { needs_approval: "承認待ち", needs_input: "質問・入力待ち", stalled: "動きなし", your_turn: "あなたの番", working: "作業中", done: "確認済み" };
+
+function el(tag, props = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) if (c != null) e.append(c);
+  return e;
+}
+
+function ago(ts) {
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return "今";
+  if (m < 60) return `${m}分前`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}時間${m % 60 ? `${m % 60}分` : ""}前` : `${Math.floor(h / 24)}日前`;
+}
+
+async function ack(body) {
+  await fetch("/api/ack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  load();
+}
+
+function textRow(label, text) {
+  if (!text) return [];
+  const dd = el("dd", {}, text);
+  if (text.length > 300 || text.split("\n").length > 5) {
+    dd.classList.add("more");
+    dd.title = "クリックで全文";
+    dd.addEventListener("click", () => dd.classList.toggle("open"));
+  }
+  return [el("dt", {}, label), dd];
+}
+
+function card(s) {
+  const actions = el("div", { class: "actions" });
+  if (s.status === "your_turn") actions.append(el("button", { onclick: () => ack({ key: s.key }) }, "確認済みにする"));
+  if (s.status === "done" && !s.hint) actions.append(el("button", { onclick: () => ack({ key: s.key, undo: true }) }, "未確認に戻す"));
+  actions.append(el("button", {
+    title: s.resumeCommand,
+    onclick: async (ev) => { await navigator.clipboard.writeText(s.resumeCommand); ev.target.textContent = "コピーしました"; },
+  }, "再開コマンドをコピー"));
+  for (const url of s.pullRequests) actions.append(el("a", { href: url, target: "_blank", rel: "noreferrer" }, url.replace(/^https:\/\/[^/]+\//, "")));
+
+  return el("div", { class: `card ${s.status}` },
+    el("div", { class: "top" },
+      el("span", { class: "badge" }, LABEL[s.status]),
+      el("span", { class: "title" }, (s.title || s.lastPrompt || s.sessionId).split("\n")[0]),
+      el("span", { class: "meta", title: new Date(s.lastActivity).toLocaleString() }, `${ago(s.lastActivity)}・${s.agent}${s.source === "hook" ? "・hook" : ""}`),
+    ),
+    el("div", { class: "where" }, `${s.project ?? "?"}${s.branch ? ` @ ${s.branch}` : ""}`),
+    s.hint ? el("div", { class: "hint" }, `→ ${s.hint}`) : null,
+    el("dl", {}, ...textRow("頼んだこと", s.lastPrompt), ...textRow("最後の報告", s.report)),
+    actions,
+  );
+}
+
+async function load() {
+  let data;
+  try {
+    data = await (await fetch("/api/sessions")).json();
+  } catch {
+    document.getElementById("updated").replaceChildren(el("span", { class: "error" }, "attn serve に接続できません"));
+    return;
+  }
+  const by = (st) => data.sessions.filter((s) => st.includes(s.status));
+  const waiting = by(SECTIONS[0].statuses).length;
+  const active = by(["working", "stalled"]).length;
+  document.getElementById("counts").replaceChildren(el("b", {}, String(waiting)), " 件があなた待ち");
+  document.getElementById("wip").replaceChildren(
+    el("span", { class: active > data.wipLimit ? "wip-over" : "count" }, `進行中 ${active} / 上限 ${data.wipLimit}`),
+  );
+  document.getElementById("updated").textContent = `更新 ${new Date(data.updatedAt).toLocaleTimeString()}`;
+  document.title = waiting ? `(${waiting}) attn` : "attn";
+
+  // 全文を開いているときは、読んでいる途中で閉じないよう描き直さない。
+  if (document.querySelector("dd.open")) return;
+  const main = document.getElementById("main");
+  main.replaceChildren(...SECTIONS.flatMap((sec) => {
+    const items = by(sec.statuses);
+    if (!items.length && !sec.empty) return [];
+    const heading = el("h2", {}, `${sec.title}（${items.length}）`);
+    if (sec === SECTIONS[0] && items.some((s) => s.status === "your_turn")) {
+      heading.append(" ", el("button", { onclick: () => ack({ all: true }) }, "「あなたの番」をすべて確認済みにする"));
+    }
+    return [heading, ...(items.length ? items.map(card) : [el("div", { class: "empty" }, sec.empty)])];
+  }));
+}
+
+load();
+setInterval(load, 3000);
+</script>
+</body>
+</html>

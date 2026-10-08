@@ -1,0 +1,16 @@
+{
+  "name": "attn",
+  "private": true,
+  "type": "module",
+  "description": "複数の AI エージェントのセッションのうち、あなたを待っているものを1か所に集める",
+  "bin": {
+    "attn": "bin/attn.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node bin/attn.js serve",
+    "test": "node --test \"test/*.test.js\""
+  }
+}
