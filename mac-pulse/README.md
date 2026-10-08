@@ -103,6 +103,24 @@ launchd/install.sh             # 1分ごとの実行を登録する（外すと�
 
 ログは `~/Library/Logs/mac-pulse.log`。
 
+## デプロイ
+
+GitHub Actions でデプロイする（リポジトリ全体の決まりは [AGENTS.md](../AGENTS.md)）。
+
+| タイミング | デプロイ先 |
+| --- | --- |
+| ブランチへのプッシュ | プレビュー環境 |
+| `main` へのマージ | 本番環境（Worker `mac-pulse`） |
+
+手元からの `npx wrangler deploy` は、上の「セットアップ」で最初に作るときだけ使う。
+
+> 現状（2026-10-09）: ワークフローはまだない。本番は手元から `wrangler deploy` したもの（最新は 2026-10-07）。
+> 作るときに決めること:
+> - プレビュー環境の形。本番の Worker のプレビュー URL（`wrangler versions upload --preview-alias`）だと、D1 と Discord 通知を本番と共有し、cron も動かない。別の Worker と D1 を持つ `preview` 環境にするか、どちらかを選ぶ。
+> - プレビュー環境を Cloudflare Access でどう守るか。
+> - GitHub のシークレットに置く Cloudflare の API トークン（権限は Workers と D1 の編集だけ）。
+> - 本番のデプロイで D1 のマイグレーション（`npm run migrate:remote`）も流すか。
+
 ## ローカルで試す
 
 Cloudflare にデプロイせずに、Worker・D1・ダッシュボードを手元で動かせる。Access は `wrangler.jsonc` の `access.dev` で模擬する。
