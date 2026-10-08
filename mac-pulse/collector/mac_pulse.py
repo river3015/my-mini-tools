@@ -41,6 +41,9 @@ class Config:
     endpoint: str = ""  # e.g. https://mac-pulse.<account>.workers.dev
     # launchd labels (prefix match) whose running state is sent.
     watch_jobs: list[str] = field(default_factory=list)
+    # Where unsent samples wait. Give a config for another endpoint (e.g. the
+    # preview Worker) its own spool so the two never send each other's samples.
+    spool_dir: str = str(SPOOL_DIR)
 
     @classmethod
     def load(cls, path: Path) -> Config:
@@ -318,9 +321,10 @@ def main() -> None:
 
     if not config.endpoint:
         raise SystemExit(f"endpoint is not set in {args.config}")
-    spool(sample, SPOOL_DIR)
+    spool_dir = Path(config.spool_dir).expanduser()
+    spool(sample, spool_dir)
     try:
-        send_spool(config.endpoint, auth_headers(), SPOOL_DIR, sample["ts"])
+        send_spool(config.endpoint, auth_headers(), spool_dir, sample["ts"])
     except urllib.error.HTTPError as e:
         body = e.read().decode(errors="replace")[:200]
         log(f"send failed: HTTP {e.code} {body}")
