@@ -105,21 +105,74 @@ launchd/install.sh             # 1分ごとの実行を登録する（外すと�
 
 ## デプロイ
 
-GitHub Actions でデプロイする（リポジトリ全体の決まりは [AGENTS.md](../AGENTS.md)）。
+[.github/workflows/mac-pulse-worker.yml](../.github/workflows/mac-pulse-worker.yml) でデプロイする（リポジトリ全体の決まりは [AGENTS.md](../AGENTS.md)）。`mac-pulse/worker/` かワークフローを変えたプッシュで動く。
 
 | タイミング | デプロイ先 |
 | --- | --- |
-| ブランチへのプッシュ | プレビュー環境 |
-| `main` へのマージ | 本番環境（Worker `mac-pulse`） |
+| `main` 以外のブランチへのプッシュ | プレビュー環境（Worker `mac-pulse-preview`、D1 `mac-pulse-preview`） |
+| `main` へのマージ | 本番環境（Worker `mac-pulse`、D1 `mac-pulse`） |
 
-手元からの `npx wrangler deploy` は、上の「セットアップ」で最初に作るときだけ使う。
+- テスト → D1 のマイグレーション → デプロイの順に流す。マイグレーションは古いコードが動いている間に当たるので、古いコードを壊さない変更にする。
+- プレビュー環境は1つで、最後にプッシュしたブランチの内容になる。
+- プレビュー環境には Discord の Webhook を設定しない（通知の判定はログに出るだけ）。cron は本番と同じく動く。
+- 手元からの `npx wrangler deploy` は、上の「セットアップ」で本番を最初に作るときだけ使う。
 
-> 現状（2026-10-09）: ワークフローはまだない。本番は手元から `wrangler deploy` したもの（最新は 2026-10-07）。
-> 作るときに決めること:
-> - プレビュー環境の形。本番の Worker のプレビュー URL（`wrangler versions upload --preview-alias`）だと、D1 と Discord 通知を本番と共有し、cron も動かない。別の Worker と D1 を持つ `preview` 環境にするか、どちらかを選ぶ。
-> - プレビュー環境を Cloudflare Access でどう守るか。
-> - GitHub のシークレットに置く Cloudflare の API トークン（権限は Workers と D1 の編集だけ）。
-> - 本番のデプロイで D1 のマイグレーション（`npm run migrate:remote`）も流すか。
+### プレビュー環境を作る（最初に1回）
+
+1. D1 を作り、表示された `database_id` を `worker/wrangler.jsonc` の `env.preview` に書く。
+
+   ```sh
+   cd worker
+   npx wrangler d1 create mac-pulse-preview
+   ```
+
+2. GitHub のリポジトリ設定（Settings → Secrets and variables → Actions）に登録する。
+   - シークレット `CLOUDFLARE_API_TOKEN`: Cloudflare の API トークン。テンプレート「Cloudflare Workers を編集する」に D1 の編集権限を足し、対象をこのアカウントだけにする。
+   - 変数 `CLOUDFLARE_ACCOUNT_ID`: `npx wrangler whoami` で表示されるアカウント ID。
+
+   環境 `preview` と `production` は、ワークフローが初めて動いたときに作られる。本番の前に承認を挟みたいときは、`production` に Required reviewers を設定する。
+3. ブランチをプッシュする。ワークフローが Worker `mac-pulse-preview` を作り、マイグレーションを流す。
+4. Cloudflare Access で守る（下記）。それまで Worker は `ACCESS_AUD is not set`（500）ですべて断る。
+
+### プレビュー環境を Cloudflare Access で守る
+
+本番の「2. Cloudflare Access」と同じ手順を、`mac-pulse-preview` に対して行う。
+
+1. ダッシュボードの Workers & Pages → mac-pulse-preview → 設定 → ドメインとルートで、workers.dev の Cloudflare Access を有効にする。Access アプリケーションが新しく作られる。
+2. Zero Trust → Access → アプリケーションで、作られたアプリケーションの AUD タグを写し、Worker に登録する。
+
+   ```sh
+   npx wrangler secret put ACCESS_AUD --env preview
+   ```
+
+3. 作られたアプリケーションのポリシーに、本番と同じ2つのルールを入れる。
+   - 自分のメールアドレスを許可する（ダッシュボードを見る用）。
+   - Service Auth で、本番で使っているサービストークンを許可する（Mac からデータを送る用）。コレクターはサービストークンをキーチェーンからしか読まないため、同じものを使う。
+
+   本番のポリシーを「再利用可能なポリシー」にしてあれば、それを付けるだけでよい。
+
+Worker は Access を通ったリクエストでも、`aud` が `ACCESS_AUD` と違えば 403 で断る。設定を間違えても開いたままにはならない。
+
+### プレビュー環境にデータを送る
+
+プレビュー用の D1 には、ふだんの Mac からはデータが来ない。確かめたいときに、手元からコレクターを向ける。
+
+```sh
+cd worker
+npm run add-host -- mbp --remote --env preview   # トークンが1回だけ表示される
+
+cat > ~/.config/mac-pulse/preview.toml <<'TOML'
+endpoint = "https://mac-pulse-preview.<your-subdomain>.workers.dev"
+# 本番の送り残しと混ざらないように、別の場所に貯める
+spool_dir = "~/.local/state/mac-pulse/spool-preview"
+TOML
+
+# 1回で1件送る。グラフを見たいときは何回か繰り返す
+for i in $(seq 10); do
+  MAC_PULSE_TOKEN=... ../collector/mac_pulse.py --config ~/.config/mac-pulse/preview.toml
+  sleep 60
+done
+```
 
 ## ローカルで試す
 

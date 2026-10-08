@@ -27,5 +27,27 @@
   "access": {
     "dev": { "aud": "local-dev", "identity": { "email": "dev@example.com" } }
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "env": {
+    // Preview: a separate Worker (mac-pulse-preview) with its own D1, deployed
+    // from branch pushes (`--env preview`). Secrets: ACCESS_AUD only; without
+    // DISCORD_WEBHOOK_URL, alerts are only logged. vars and d1_databases are
+    // not inherited, so they are repeated here.
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "mac-pulse-preview",
+          // From `npx wrangler d1 create mac-pulse-preview`.
+          "database_id": "TODO",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "STALE_MINUTES": "0",
+        "DISK_LOW_GB": "10",
+        "TZ": "Asia/Tokyo"
+      }
+    }
+  }
 }
