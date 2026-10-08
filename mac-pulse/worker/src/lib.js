@@ -200,6 +200,8 @@ export function rollupWindow(nowS) {
 }
 
 export const RANGES = {
+  "1h": { seconds: 3600, table: "samples" },
+  "6h": { seconds: 6 * 3600, table: "samples" },
   "24h": { seconds: 24 * 3600, table: "samples" },
   "7d": { seconds: 7 * 24 * 3600, table: "samples_hourly" },
   "30d": { seconds: 30 * 24 * 3600, table: "samples_hourly" },
