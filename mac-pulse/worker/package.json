@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.js\"",
     "migrate:local": "wrangler d1 migrations apply mac-pulse --local",
     "migrate:remote": "wrangler d1 migrations apply mac-pulse --remote",
     "add-host": "node scripts/add-host.mjs"
