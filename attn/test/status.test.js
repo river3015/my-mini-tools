@@ -58,3 +58,9 @@ test("並び順: 急ぎが先、あなた待ちは待たせている時間が長
     ["working", 5],
   ]);
 });
+
+test("あなたの番は、あなたにしてほしいことの急ぐ順。4行がないものは「確認」と同じ扱い", () => {
+  const s = (askType, lastActivity) => ({ status: "your_turn", lastActivity, card: askType ? { askType } : null });
+  const list = [s("なし", 1), s(null, 2), s("確認", 3), s("作業", 4), s("判断", 5)].sort(compareSessions);
+  assert.deepEqual(list.map((x) => x.card?.askType ?? "-"), ["作業", "判断", "-", "確認", "なし"]);
+});

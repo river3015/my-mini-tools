@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseClaude, parseCodex, findPullRequests } from "./transcript.js";
+import { parseClaude, parseCodex, findPullRequests, parseCard } from "./transcript.js";
 import { resolveStatus, compareSessions, statusFromHook } from "./status.js";
 
 export function paths(env = process.env) {
@@ -253,6 +253,7 @@ export function collectSessions(p, opts = DEFAULT_OPTS, now = Date.now()) {
       lastPrompt: snap.lastPrompt,
       lastPromptAt: snap.lastPromptAt,
       report: snap.finalText ?? snap.lastText,
+      card: parseCard(snap.finalText),
       pullRequests: findPullRequests(snap.finalText, snap.lastText),
       ...resolved,
       resumeCommand:

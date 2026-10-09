@@ -177,3 +177,28 @@ export function findPullRequests(...texts) {
   }
   return [...urls];
 }
+
+// 応答の先頭の4行（目的・依頼・結果・あなたへ）を読み取る。書式は ~/.claude/CLAUDE.md（~/.codex/AGENTS.md）で決めている。
+const CARD_FIELDS = { 目的: "purpose", 依頼: "request", 結果: "result", あなたへ: "ask" };
+const CARD_LINE = /^\s*(?:[>*-]\s*)*\**(目的|依頼|結果|あなたへ)\**\s*[:：]\s*\**\s*(.+?)\s*$/;
+const ASK_LINE = /^\[?\s*(作業|回答|判断|確認|なし)\s*\]?\s*[:：—–-]?\s*(.*)$/;
+
+// 「あなたへ」の種類。急ぐ順に並べている。
+export const ASK_TYPES = ["作業", "回答", "判断", "確認", "なし"];
+
+export function parseCard(text) {
+  if (!text) return null;
+  const card = {};
+  // 4行は先頭に書く決まりなので、前置きが少しあっても拾えるよう先頭の30行だけを見る。
+  for (const line of text.split("\n").slice(0, 30)) {
+    const m = line.match(CARD_LINE);
+    if (m) card[CARD_FIELDS[m[1]]] ??= m[2];
+  }
+  if (!card.result && !card.ask) return null;
+  const t = card.ask?.match(ASK_LINE);
+  if (t) {
+    card.askType = t[1];
+    card.ask = t[2] || null;
+  }
+  return card;
+}

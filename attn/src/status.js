@@ -1,3 +1,5 @@
+import { ASK_TYPES } from "./transcript.js";
+
 // ログから読んだ様子（snapshot）とフックのイベントを合わせて、セッションの状態を1つに決める。
 
 export const STATUS = {
@@ -84,7 +86,18 @@ export function resolveStatus(snap, hook, ack, now, opts) {
 export function compareSessions(a, b) {
   const r = STATUS[a.status].rank - STATUS[b.status].rank;
   if (r !== 0) return r;
+  // あなたの番は、あなたにしてほしいことの急ぐ順（作業 → 回答 → 判断 → 確認 → なし）。
+  // 4行がない応答は、何を求めているか分からないので「確認」と同じ扱いにする。
+  if (a.status === "your_turn") {
+    const k = askRank(a) - askRank(b);
+    if (k !== 0) return k;
+  }
   // あなた待ちは、待たせている時間が長い順。それ以外は新しい順。
   if (STATUS[a.status].rank <= STATUS.your_turn.rank) return (a.lastActivity ?? 0) - (b.lastActivity ?? 0);
   return (b.lastActivity ?? 0) - (a.lastActivity ?? 0);
+}
+
+function askRank(s) {
+  const i = ASK_TYPES.indexOf(s.card?.askType);
+  return i === -1 ? ASK_TYPES.indexOf("確認") : i;
 }

@@ -40,10 +40,15 @@
   .meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .where { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
   .hint { font-size: 12px; margin-top: 4px; }
+  .ask { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 6px; margin-right: 6px; border-radius: 4px; background: var(--line); }
+  .ask.作業, .ask.回答, .ask.判断 { background: var(--red); color: var(--card); }
+  .ask.確認 { background: var(--amber); color: var(--card); }
+  details { margin-top: 6px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   dl { margin: 8px 0 0; display: grid; grid-template-columns: 6.5em 1fr; gap: 4px 8px; }
   dt { color: var(--muted); font-size: 12px; }
   dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: hidden; }
-  dd.open { max-height: none; }
+  dd.open, dd.full { max-height: none; }
   dd.more { cursor: pointer; }
   .actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 5px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
@@ -104,6 +109,23 @@ function textRow(label, text) {
   return [el("dt", {}, label), dd];
 }
 
+// 応答の先頭の4行があれば、それを見出しにし、全文は畳んでおく。
+function cardRows(s) {
+  const c = s.card;
+  const ask = c.askType || c.ask
+    ? el("dd", {}, c.askType ? el("span", { class: `ask ${c.askType}` }, c.askType) : null, c.ask ?? "")
+    : null;
+  return el("div", {},
+    el("dl", {},
+      ...textRow("目的", c.purpose),
+      ...textRow("依頼", c.request ?? s.lastPrompt),
+      ...textRow("結果", c.result),
+      ...(ask ? [el("dt", {}, "あなたへ"), ask] : []),
+    ),
+    s.report ? el("details", {}, el("summary", {}, "報告の全文"), el("dl", {}, el("dt", {}, ""), el("dd", { class: "full" }, s.report))) : null,
+  );
+}
+
 function card(s) {
   const actions = el("div", { class: "actions" });
   if (s.status === "your_turn") actions.append(el("button", { onclick: () => ack({ key: s.key }) }, "確認済みにする"));
@@ -122,7 +144,7 @@ function card(s) {
     ),
     el("div", { class: "where" }, `${s.project ?? "?"}${s.branch ? ` @ ${s.branch}` : ""}`),
     s.hint ? el("div", { class: "hint" }, `→ ${s.hint}`) : null,
-    el("dl", {}, ...textRow("頼んだこと", s.lastPrompt), ...textRow("最後の報告", s.report)),
+    s.card ? cardRows(s) : el("dl", {}, ...textRow("頼んだこと", s.lastPrompt), ...textRow("最後の報告", s.report)),
     actions,
   );
 }
@@ -146,7 +168,7 @@ async function load() {
   document.title = waiting ? `(${waiting}) attn` : "attn";
 
   // 全文を開いているときは、読んでいる途中で閉じないよう描き直さない。
-  if (document.querySelector("dd.open")) return;
+  if (document.querySelector("dd.open, details[open]")) return;
   const main = document.getElementById("main");
   main.replaceChildren(...SECTIONS.flatMap((sec) => {
     const items = by(sec.statuses);

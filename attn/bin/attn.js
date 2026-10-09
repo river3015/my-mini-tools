@@ -90,7 +90,8 @@ function list(p, opts, asJson) {
     const where = `${s.project ?? "?"}${s.branch ? `@${s.branch}` : ""}`;
     const title = (s.title ?? s.lastPrompt ?? "").split("\n")[0].slice(0, 50);
     console.log(`${label} ${ago(now - s.lastActivity).padStart(6)}  ${s.agent.padEnd(6)} ${where}  ${title}`);
-    if (s.hint) console.log(`${" ".repeat(26)}└ ${s.hint}`);
+    const ask = s.card?.askType ? `あなたへ[${s.card.askType}] ${s.card.ask ?? ""}` : null;
+    if (ask || s.hint) console.log(`${" ".repeat(26)}└ ${ask ?? s.hint}`);
   }
 }
 

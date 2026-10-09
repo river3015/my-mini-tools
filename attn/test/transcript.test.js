@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseClaude, parseCodex, findPullRequests } from "../src/transcript.js";
+import { parseClaude, parseCodex, findPullRequests, parseCard } from "../src/transcript.js";
 
 const sid = "s-1";
 const base = { sessionId: sid, cwd: "/repo", gitBranch: "feat/x", entrypoint: "cli" };
@@ -77,4 +77,30 @@ test("PR と MR の URL を重複なく拾う", () => {
     findPullRequests("see https://github.com/a/b/pull/1 and https://gitlab.example.com/g/p/-/merge_requests/9", "https://github.com/a/b/pull/1"),
     ["https://github.com/a/b/pull/1", "https://gitlab.example.com/g/p/-/merge_requests/9"],
   );
+});
+
+test("応答の先頭の4行を読み取る（太字・全角コロン・引用の書き方の違いを許す）", () => {
+  const text = [
+    "**目的**: 並列のエージェントを切り替えやすくする",
+    "**依頼**：報告の書式を決める",
+    "> **結果:** 完了。書式を決めて attn で読めるようにした",
+    "- **あなたへ**: [確認] PR #3 を見てマージ",
+    "",
+    "## 変更内容",
+    "**結果**: 本文の中の同じ語は拾わない",
+  ].join("\n");
+  assert.deepEqual(parseCard(text), {
+    purpose: "並列のエージェントを切り替えやすくする",
+    request: "報告の書式を決める",
+    result: "完了。書式を決めて attn で読めるようにした",
+    ask: "PR #3 を見てマージ",
+    askType: "確認",
+  });
+});
+
+test("「あなたへ」が種類だけ・かっこなしでも読める。4行がなければ null", () => {
+  assert.deepEqual(parseCard("**結果**: 完了\n**あなたへ**: なし"), { result: "完了", ask: null, askType: "なし" });
+  assert.equal(parseCard("**あなたへ**: 判断 — A と B のどちらにするか").askType, "判断");
+  assert.equal(parseCard("ふつうの報告です。\n結果として直りました。"), null);
+  assert.equal(parseCard(null), null);
 });
